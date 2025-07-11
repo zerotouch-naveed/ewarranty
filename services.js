@@ -1,6 +1,370 @@
-const { User, UserHierarchy, KeyManagement, Customer, AuditLog } = require('./schemas');
+const { User, UserHierarchy, KeyManagement, Customer, AuditLog, Company, SupportPermission, SupportAssignment } = require('./schemas');
 
-// Hierarchy Management Service
+// Company Management Service
+class CompanyService {
+  
+  // Create main company (only one should exist)
+  static async createMainCompany(companyData, createdBy = null) {
+    try {
+      // Check if main company already exists
+      const existingMainCompany = await Company.findOne({ companyType: 'MAIN' });
+      if (existingMainCompany) {
+        throw new Error('Main company already exists');
+      }
+
+      const company = new Company({
+        companyId: `MAIN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        companyType: 'MAIN',
+        parentCompanyId: null,
+        ...companyData,
+        createdBy
+      });
+
+      await company.save();
+
+      // Create audit log
+      if (createdBy) {
+        await this.createAuditLog(createdBy, 'CREATE', 'COMPANY', company.companyId, null, company.toObject(), company.companyId);
+      }
+
+      return company;
+    } catch (error) {
+      throw new Error(`Error creating main company: ${error.message}`);
+    }
+  }
+
+  // Create white-label company
+  static async createWhitelabelCompany(companyData, createdBy, parentCompanyId = null) {
+    try {
+      // Get main company if parentCompanyId not provided
+      if (!parentCompanyId) {
+        const mainCompany = await Company.findOne({ companyType: 'MAIN' });
+        if (!mainCompany) {
+          throw new Error('Main company must exist before creating white-labels');
+        }
+        parentCompanyId = mainCompany.companyId;
+      }
+
+      // Verify creator has permission
+      const creator = await User.findOne({ userId: createdBy });
+      if (!creator || (!creator.userType.startsWith('MAIN_') && !creator.userType.startsWith('WHITELABEL_OWNER'))) {
+        throw new Error('Only main company users or white-label owners can create white-label companies');
+      }
+
+      const company = new Company({
+        companyId: `WL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        companyType: 'WHITELABEL',
+        parentCompanyId,
+        ...companyData,
+        createdBy
+      });
+
+      await company.save();
+
+      // Create audit log
+      await this.createAuditLog(createdBy, 'CREATE', 'COMPANY', company.companyId, null, company.toObject(), creator.companyId);
+
+      return company;
+    } catch (error) {
+      throw new Error(`Error creating white-label company: ${error.message}`);
+    }
+  }
+
+  // Get companies accessible to a user
+  static async getAccessibleCompanies(userId) {
+    try {
+      const user = await User.findOne({ userId });
+      if (!user) throw new Error('User not found');
+
+      let query = {};
+
+      if (user.userType.startsWith('MAIN_')) {
+        // Main company users can see all companies
+        query = {};
+      } else if (user.userType.startsWith('WHITELABEL_')) {
+        // White-label users can only see their own company
+        query = { companyId: user.companyId };
+      } else {
+        // Legacy users can only see their company
+        query = { companyId: user.companyId };
+      }
+
+      return await Company.find(query).sort({ createdAt: -1 });
+    } catch (error) {
+      throw new Error(`Error getting accessible companies: ${error.message}`);
+    }
+  }
+
+  // Create audit log entry
+  static async createAuditLog(userId, action, entityType, entityId, oldData, newData, companyId, onBehalfOf = null) {
+    try {
+      const auditLog = new AuditLog({
+        logId: `LOG_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        companyId,
+        userId,
+        action,
+        entityType,
+        entityId,
+        oldData,
+        newData,
+        onBehalfOf,
+        timestamp: new Date()
+      });
+
+      await auditLog.save();
+      return auditLog;
+    } catch (error) {
+      console.error('Error creating audit log:', error);
+    }
+  }
+}
+
+// Support Permission Service
+class SupportPermissionService {
+  
+  // Create a permission set for support employees
+  static async createPermissionSet(permissionData, createdBy) {
+    try {
+      const creator = await User.findOne({ userId: createdBy });
+      if (!creator) throw new Error('Creator not found');
+
+      // Only owners and employees can create permission sets
+      if (!creator.userType.includes('OWNER') && !creator.userType.includes('EMPLOYEE')) {
+        throw new Error('Only owners and employees can create permission sets');
+      }
+
+      const permission = new SupportPermission({
+        permissionId: `PERM_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        companyId: creator.companyId,
+        ...permissionData,
+        createdBy
+      });
+
+      await permission.save();
+
+      // Create audit log
+      await CompanyService.createAuditLog(
+        createdBy,
+        'CREATE',
+        'PERMISSION',
+        permission.permissionId,
+        null,
+        permission.toObject(),
+        creator.companyId
+      );
+
+      return permission;
+    } catch (error) {
+      throw new Error(`Error creating permission set: ${error.message}`);
+    }
+  }
+
+  // Assign permission set to a support employee
+  static async assignPermissionToUser(userId, permissionSetId, assignedBy) {
+    try {
+      const user = await User.findOne({ userId });
+      const assigner = await User.findOne({ userId: assignedBy });
+      const permissionSet = await SupportPermission.findOne({ permissionId: permissionSetId });
+
+      if (!user || !assigner || !permissionSet) {
+        throw new Error('User, assigner, or permission set not found');
+      }
+
+      // Check if user is a support employee
+      if (!user.userType.includes('SUPPORT_EMPLOYEE')) {
+        throw new Error('Permissions can only be assigned to support employees');
+      }
+
+      // Check hierarchy permission
+      const canAssign = await this.canAssignPermissions(assignedBy, userId);
+      if (!canAssign) {
+        throw new Error('No permission to assign permissions to this user');
+      }
+
+      // Update user with permission set
+      user.supportPermissions.permissionSetId = permissionSetId;
+      user.supportPermissions.assignedBy = assignedBy;
+      user.supportPermissions.assignedAt = new Date();
+      user.supportPermissions.effectivePermissions = permissionSet.permissions;
+
+      await user.save();
+
+      // Create audit log
+      await CompanyService.createAuditLog(
+        assignedBy,
+        'PERMISSION_CHANGE',
+        'USER',
+        userId,
+        null,
+        { permissionSetId, assignedBy },
+        assigner.companyId
+      );
+
+      return user;
+    } catch (error) {
+      throw new Error(`Error assigning permission: ${error.message}`);
+    }
+  }
+
+  // Check if user can assign permissions to another user
+  static async canAssignPermissions(assignerId, targetUserId) {
+    try {
+      const assigner = await User.findOne({ userId: assignerId });
+      const target = await User.findOne({ userId: targetUserId });
+
+      if (!assigner || !target) return false;
+
+      // Owners and employees can assign permissions to support employees in their hierarchy
+      if (assigner.userType.includes('OWNER') || assigner.userType.includes('EMPLOYEE')) {
+        // Check if same company or if main company user assigning to white-label
+        if (assigner.companyId === target.companyId) return true;
+        
+        if (assigner.userType.startsWith('MAIN_')) {
+          const targetCompany = await Company.findOne({ companyId: target.companyId });
+          const assignerCompany = await Company.findOne({ companyId: assigner.companyId });
+          
+          if (assignerCompany?.companyType === 'MAIN' && targetCompany?.companyType === 'WHITELABEL') {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Get permission sets for a company
+  static async getPermissionSets(companyId, requestingUserId) {
+    try {
+      const requester = await User.findOne({ userId: requestingUserId });
+      if (!requester) throw new Error('Requesting user not found');
+
+      let query = { companyId, isActive: true };
+
+      // Main company users can see all permission sets
+      if (requester.userType.startsWith('MAIN_')) {
+        query = { isActive: true };
+      }
+
+      return await SupportPermission.find(query).sort({ createdAt: -1 });
+    } catch (error) {
+      throw new Error(`Error getting permission sets: ${error.message}`);
+    }
+  }
+}
+
+// Support Assignment Service
+class SupportAssignmentService {
+  
+  // Assign support employee to company/user/hierarchy
+  static async createAssignment(assignmentData, assignedBy) {
+    try {
+      const assigner = await User.findOne({ userId: assignedBy });
+      const supportEmployee = await User.findOne({ userId: assignmentData.supportEmployeeId });
+
+      if (!assigner || !supportEmployee) {
+        throw new Error('Assigner or support employee not found');
+      }
+
+      // Verify support employee
+      if (!supportEmployee.userType.includes('SUPPORT_EMPLOYEE')) {
+        throw new Error('Can only assign support employees');
+      }
+
+      // Check assignment permission
+      const canAssign = await this.canCreateAssignment(assignedBy, assignmentData);
+      if (!canAssign) {
+        throw new Error('No permission to create this assignment');
+      }
+
+      const assignment = new SupportAssignment({
+        assignmentId: `ASSIGN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        ...assignmentData,
+        assignedBy
+      });
+
+      await assignment.save();
+
+      // Update user's assigned companies if it's a company assignment
+      if (assignmentData.assignmentType === 'COMPANY' && assignmentData.targetCompanyId) {
+        const targetCompany = await Company.findOne({ companyId: assignmentData.targetCompanyId });
+        if (targetCompany) {
+          supportEmployee.assignedCompanies.push({
+            companyId: assignmentData.targetCompanyId,
+            companyName: targetCompany.name,
+            assignedAt: new Date(),
+            assignedBy
+          });
+          await supportEmployee.save();
+        }
+      }
+
+      // Create audit log
+      await CompanyService.createAuditLog(
+        assignedBy,
+        'SUPPORT_ASSIGNMENT',
+        'ASSIGNMENT',
+        assignment.assignmentId,
+        null,
+        assignment.toObject(),
+        assigner.companyId
+      );
+
+      return assignment;
+    } catch (error) {
+      throw new Error(`Error creating assignment: ${error.message}`);
+    }
+  }
+
+  // Check if user can create assignment
+  static async canCreateAssignment(assignerId, assignmentData) {
+    try {
+      const assigner = await User.findOne({ userId: assignerId });
+      if (!assigner) return false;
+
+      // Only owners and employees can create assignments
+      if (!assigner.userType.includes('OWNER') && !assigner.userType.includes('EMPLOYEE')) {
+        return false;
+      }
+
+      // Main company users can assign to any white-label
+      if (assigner.userType.startsWith('MAIN_')) {
+        return true;
+      }
+
+      // White-label users can only assign within their company
+      if (assigner.userType.startsWith('WHITELABEL_')) {
+        if (assignmentData.targetCompanyId === assigner.companyId) {
+          return true;
+        }
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Get assignments for a support employee
+  static async getUserAssignments(supportEmployeeId) {
+    try {
+      return await SupportAssignment.find({
+        supportEmployeeId,
+        isActive: true,
+        $or: [
+          { expiresAt: null },
+          { expiresAt: { $gt: new Date() } }
+        ]
+      }).sort({ assignedAt: -1 });
+    } catch (error) {
+      throw new Error(`Error getting user assignments: ${error.message}`);
+    }
+  }
+}
+
+// Enhanced Hierarchy Management Service
 class HierarchyService {
   
   // Create or update user hierarchy when a new user is created
@@ -12,6 +376,16 @@ class HierarchyService {
       let hierarchyPath = [];
       let allParents = [];
       let directParent = null;
+      let crossCompanyAccess = [];
+
+      // Handle cross-company access for main company users
+      if (user.userType.startsWith('MAIN_')) {
+        const whitelabelCompanies = await Company.find({ companyType: 'WHITELABEL' });
+        crossCompanyAccess = whitelabelCompanies.map(company => ({
+          companyId: company.companyId,
+          accessLevel: user.userType.includes('SUPPORT_EMPLOYEE') ? 'SUPPORT_ONLY' : 'FULL'
+        }));
+      }
 
       // If user has a parent, build hierarchy path
       if (parentUserId) {
@@ -53,6 +427,7 @@ class HierarchyService {
         { userId },
         {
           companyId,
+          crossCompanyAccess,
           hierarchyPath,
           directParent,
           allParents,
@@ -132,29 +507,165 @@ class HierarchyService {
     }
   }
 
-  // Check if user has permission to view/edit another user's data
-  static async checkUserPermission(requestingUserId, targetUserId) {
+  // Enhanced permission check with support employee logic
+  static async checkUserPermission(requestingUserId, targetUserId, action = 'VIEW') {
     try {
+      const requestingUser = await User.findOne({ userId: requestingUserId });
+      const targetUser = await User.findOne({ userId: targetUserId });
+      
+      if (!requestingUser || !targetUser) return false;
+
+      // Support employees have limited permissions based on their assignment and permission set
+      if (requestingUser.userType.includes('SUPPORT_EMPLOYEE')) {
+        return await this.checkSupportEmployeePermission(requestingUserId, targetUserId, action);
+      }
+
+      // Regular hierarchy check for non-support employees
       const requestingUserHierarchy = await UserHierarchy.findOne({ userId: requestingUserId });
       const targetUserHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
       
-      if (!requestingUserHierarchy || !targetUserHierarchy) {
-        return false;
+      if (!requestingUserHierarchy || !targetUserHierarchy) return false;
+
+      // Same user
+      if (requestingUserId === targetUserId) return true;
+
+      // Check company access
+      if (requestingUser.companyId === targetUser.companyId) {
+        // Same company - check hierarchy
+        const isParent = targetUserHierarchy.hierarchyPath.some(
+          parent => parent.userId === requestingUserId
+        );
+        const isChild = requestingUserHierarchy.allChildren.some(
+          child => child.userId === targetUserId
+        );
+        return isParent || isChild;
       }
 
-      // Check if requesting user is in target user's hierarchy path (is a parent)
-      const isParent = targetUserHierarchy.hierarchyPath.some(
-        parent => parent.userId === requestingUserId
-      );
+      // Cross-company access for main company users
+      if (requestingUser.userType.startsWith('MAIN_')) {
+        const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
+        return targetCompany?.companyType === 'WHITELABEL';
+      }
 
-      // Check if target user is in requesting user's all children (is a child)
-      const isChild = requestingUserHierarchy.allChildren.some(
-        child => child.userId === targetUserId
-      );
-
-      return isParent || isChild || requestingUserId === targetUserId;
+      return false;
     } catch (error) {
       throw new Error(`Error checking user permission: ${error.message}`);
+    }
+  }
+
+  // Check support employee specific permissions
+  static async checkSupportEmployeePermission(supportUserId, targetUserId, action) {
+    try {
+      const supportUser = await User.findOne({ userId: supportUserId });
+      const targetUser = await User.findOne({ userId: targetUserId });
+      
+      if (!supportUser || !targetUser) return false;
+
+      // Check if support employee has effective permissions for this action
+      const permissions = supportUser.supportPermissions.effectivePermissions;
+      if (!permissions) return false;
+
+      // Map actions to permissions
+      const actionPermissionMap = {
+        'VIEW': permissions.canViewUsers,
+        'CREATE': permissions.canCreateUsers,
+        'EDIT': permissions.canEditUsers,
+        'DELETE': permissions.canDeleteUsers,
+        'VIEW_CUSTOMERS': permissions.canViewCustomers,
+        'CREATE_CUSTOMERS': permissions.canCreateCustomers,
+        'EDIT_CUSTOMERS': permissions.canEditCustomers,
+        'DELETE_CUSTOMERS': permissions.canDeleteCustomers
+      };
+
+      if (!actionPermissionMap[action]) return false;
+
+      // Check assignments
+      const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
+      
+      for (const assignment of assignments) {
+        if (assignment.assignmentType === 'COMPANY' && assignment.targetCompanyId === targetUser.companyId) {
+          return true;
+        }
+        if (assignment.assignmentType === 'USER' && assignment.targetUserId === targetUserId) {
+          return true;
+        }
+        if (assignment.assignmentType === 'HIERARCHY') {
+          // Check if target user is within the assigned hierarchy level
+          const targetHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
+          if (targetHierarchy && targetHierarchy.hierarchyPath.length <= assignment.targetHierarchyLevel) {
+            return true;
+          }
+        }
+      }
+
+      // Cross-company access for main company support employees
+      if (supportUser.userType === 'MAIN_SUPPORT_EMPLOYEE' && permissions.canAccessCrossCompany) {
+        const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
+        return targetCompany?.companyType === 'WHITELABEL';
+      }
+
+      return false;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Get all users that a specific user can manage (with support employee logic)
+  static async getManageableUsers(userId) {
+    try {
+      const user = await User.findOne({ userId });
+      if (!user) return [];
+
+      // Support employees have different logic
+      if (user.userType.includes('SUPPORT_EMPLOYEE')) {
+        return await this.getSupportEmployeeManageableUsers(userId);
+      }
+
+      // Regular hierarchy logic
+      const hierarchy = await UserHierarchy.findOne({ userId });
+      if (!hierarchy) return [];
+
+      const manageableUserIds = hierarchy.allChildren.map(child => child.userId);
+      manageableUserIds.push(userId); // User can manage themselves
+
+      // Add cross-company access for main company users
+      if (user.userType.startsWith('MAIN_')) {
+        const whitelabelUsers = await User.find({
+          companyId: { $in: hierarchy.crossCompanyAccess.map(access => access.companyId) }
+        });
+        manageableUserIds.push(...whitelabelUsers.map(u => u.userId));
+      }
+
+      return await User.find({ userId: { $in: manageableUserIds } });
+    } catch (error) {
+      throw new Error(`Error getting manageable users: ${error.message}`);
+    }
+  }
+
+  // Get users manageable by support employee
+  static async getSupportEmployeeManageableUsers(supportUserId) {
+    try {
+      const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
+      let manageableUserIds = [supportUserId]; // Support employee can manage themselves
+
+      for (const assignment of assignments) {
+        if (assignment.assignmentType === 'COMPANY') {
+          const companyUsers = await User.find({ companyId: assignment.targetCompanyId });
+          manageableUserIds.push(...companyUsers.map(u => u.userId));
+        } else if (assignment.assignmentType === 'USER') {
+          manageableUserIds.push(assignment.targetUserId);
+        } else if (assignment.assignmentType === 'HIERARCHY') {
+          // Get users within the assigned hierarchy level
+          const hierarchyUsers = await UserHierarchy.find({
+            'hierarchyPath.level': { $lte: assignment.targetHierarchyLevel }
+          });
+          manageableUserIds.push(...hierarchyUsers.map(h => h.userId));
+        }
+      }
+
+      return await User.find({ userId: { $in: [...new Set(manageableUserIds)] } });
+    } catch (error) {
+      throw new Error(`Error getting support employee manageable users: ${error.message}`);
     }
   }
 
@@ -169,43 +680,36 @@ class HierarchyService {
         parents: hierarchy.allParents,
         children: hierarchy.allChildren,
         directChildren: hierarchy.directChildren,
-        hierarchyPath: hierarchy.hierarchyPath
+        hierarchyPath: hierarchy.hierarchyPath,
+        crossCompanyAccess: hierarchy.crossCompanyAccess || []
       };
     } catch (error) {
       throw new Error(`Error getting user hierarchy: ${error.message}`);
     }
   }
-
-  // Get all users that a specific user can manage
-  static async getManageableUsers(userId) {
-    try {
-      const hierarchy = await UserHierarchy.findOne({ userId });
-      if (!hierarchy) return [];
-
-      const manageableUserIds = hierarchy.allChildren.map(child => child.userId);
-      manageableUserIds.push(userId); // User can manage themselves
-
-      return await User.find({ userId: { $in: manageableUserIds } });
-    } catch (error) {
-      throw new Error(`Error getting manageable users: ${error.message}`);
-    }
-  }
 }
 
-// Key Management Service
+// Enhanced Key Management Service (with support employee restrictions)
 class KeyManagementService {
   
-  // Allocate keys from parent to child
+  // Allocate keys from parent to child (RESTRICTED for support employees)
   static async allocateKeys(fromUserId, toUserId, keyCount, companyId) {
     try {
-      // Check if fromUser has enough keys
+      // Check if fromUser is a support employee (not allowed)
       const fromUser = await User.findOne({ userId: fromUserId });
-      if (!fromUser || fromUser.keyAllocation.remainingKeys < keyCount) {
+      if (!fromUser) throw new Error('From user not found');
+      
+      if (fromUser.userType.includes('SUPPORT_EMPLOYEE')) {
+        throw new Error('Support employees cannot allocate keys');
+      }
+
+      // Check if fromUser has enough keys
+      if (fromUser.keyAllocation.remainingKeys < keyCount) {
         throw new Error('Insufficient keys to allocate');
       }
 
       // Check if users are in the same hierarchy
-      const hasPermission = await HierarchyService.checkUserPermission(fromUserId, toUserId);
+      const hasPermission = await HierarchyService.checkUserPermission(fromUserId, toUserId, 'EDIT');
       if (!hasPermission) {
         throw new Error('No permission to allocate keys to this user');
       }
@@ -239,13 +743,14 @@ class KeyManagementService {
         fromUserId,
         toUserId,
         keyCount,
-        isActive: true
+        isActive: true,
+        isRestrictedOperation: true
       });
 
       await keyRecord.save();
 
       // Create audit log
-      await this.createAuditLog(fromUserId, 'KEY_ALLOCATION', 'KEY', keyRecord.keyId, null, {
+      await CompanyService.createAuditLog(fromUserId, 'KEY_ALLOCATION', 'KEY', keyRecord.keyId, null, {
         fromUserId,
         toUserId,
         keyCount
@@ -257,11 +762,19 @@ class KeyManagementService {
     }
   }
 
-  // Revoke keys from a user
+  // Revoke keys from a user (RESTRICTED for support employees)
   static async revokeKeys(fromUserId, targetUserId, keyCount, companyId) {
     try {
+      // Check if fromUser is a support employee (not allowed)
+      const fromUser = await User.findOne({ userId: fromUserId });
+      if (!fromUser) throw new Error('From user not found');
+      
+      if (fromUser.userType.includes('SUPPORT_EMPLOYEE')) {
+        throw new Error('Support employees cannot revoke keys');
+      }
+
       // Check permissions
-      const hasPermission = await HierarchyService.checkUserPermission(fromUserId, targetUserId);
+      const hasPermission = await HierarchyService.checkUserPermission(fromUserId, targetUserId, 'EDIT');
       if (!hasPermission) {
         throw new Error('No permission to revoke keys from this user');
       }
@@ -300,13 +813,14 @@ class KeyManagementService {
         fromUserId,
         toUserId: targetUserId,
         keyCount,
-        isActive: true
+        isActive: true,
+        isRestrictedOperation: true
       });
 
       await keyRecord.save();
 
       // Create audit log
-      await this.createAuditLog(fromUserId, 'KEY_REVOCATION', 'KEY', keyRecord.keyId, null, {
+      await CompanyService.createAuditLog(fromUserId, 'KEY_REVOCATION', 'KEY', keyRecord.keyId, null, {
         fromUserId,
         targetUserId,
         keyCount
@@ -324,6 +838,11 @@ class KeyManagementService {
       const retailer = await User.findOne({ userId: retailerId });
       if (!retailer || retailer.keyAllocation.remainingKeys < 1) {
         throw new Error('No keys available to use');
+      }
+
+      // Support employees can't use keys directly
+      if (retailer.userType.includes('SUPPORT_EMPLOYEE')) {
+        throw new Error('Support employees cannot use keys directly');
       }
 
       // Generate unique warranty key
@@ -348,13 +867,14 @@ class KeyManagementService {
         fromUserId: null,
         toUserId: retailerId,
         keyCount: 1,
-        isActive: true
+        isActive: true,
+        isRestrictedOperation: true
       });
 
       await keyRecord.save();
 
       // Create audit log
-      await this.createAuditLog(retailerId, 'KEY_USAGE', 'KEY', keyRecord.keyId, null, {
+      await CompanyService.createAuditLog(retailerId, 'KEY_USAGE', 'KEY', keyRecord.keyId, null, {
         retailerId,
         warrantyKey
       }, companyId);
@@ -365,9 +885,25 @@ class KeyManagementService {
     }
   }
 
-  // Get key allocation history for a user
-  static async getKeyHistory(userId, companyId) {
+  // Get key allocation history for a user (support employees can view if permitted)
+  static async getKeyHistory(userId, companyId, requestingUserId = null) {
     try {
+      // If requesting user is specified, check permissions
+      if (requestingUserId && requestingUserId !== userId) {
+        const hasPermission = await HierarchyService.checkUserPermission(requestingUserId, userId, 'VIEW');
+        if (!hasPermission) {
+          throw new Error('No permission to view key history for this user');
+        }
+
+        // Additional check for support employees
+        const requestingUser = await User.findOne({ userId: requestingUserId });
+        if (requestingUser?.userType.includes('SUPPORT_EMPLOYEE')) {
+          if (!requestingUser.supportPermissions.effectivePermissions.canViewKeyHistory) {
+            throw new Error('Support employee does not have permission to view key history');
+          }
+        }
+      }
+
       const history = await KeyManagement.find({
         $or: [
           { fromUserId: userId },
@@ -381,43 +917,36 @@ class KeyManagementService {
       throw new Error(`Error getting key history: ${error.message}`);
     }
   }
-
-  // Create audit log entry
-  static async createAuditLog(userId, action, entityType, entityId, oldData, newData, companyId) {
-    try {
-      const auditLog = new AuditLog({
-        logId: `LOG_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        companyId,
-        userId,
-        action,
-        entityType,
-        entityId,
-        oldData,
-        newData,
-        timestamp: new Date()
-      });
-
-      await auditLog.save();
-      return auditLog;
-    } catch (error) {
-      console.error('Error creating audit log:', error);
-    }
-  }
 }
 
-// Customer Service
+// Enhanced Customer Service (with support employee permission checks)
 class CustomerService {
   
-  // Create a new customer warranty
-  static async createCustomer(customerData, retailerId, companyId) {
+  // Create a new customer warranty (support employees can do this if permitted)
+  static async createCustomer(customerData, retailerId, companyId, createdBy = null) {
     try {
-      // Check if retailer exists and is a retailer
-      const retailer = await User.findOne({ userId: retailerId, userType: 'RETAILER' });
-      if (!retailer) {
-        throw new Error('Invalid retailer');
+      const actualCreator = createdBy || retailerId;
+      const creator = await User.findOne({ userId: actualCreator });
+      const retailer = await User.findOne({ userId: retailerId });
+
+      if (!creator || !retailer) {
+        throw new Error('Creator or retailer not found');
       }
 
-      // Use a key to create warranty
+      // Check if creator is a support employee and has permission
+      if (creator.userType.includes('SUPPORT_EMPLOYEE')) {
+        if (!creator.supportPermissions.effectivePermissions.canCreateCustomers) {
+          throw new Error('Support employee does not have permission to create customers');
+        }
+        
+        // Check if support employee can act on behalf of this retailer
+        const hasPermission = await HierarchyService.checkUserPermission(actualCreator, retailerId, 'CREATE_CUSTOMERS');
+        if (!hasPermission) {
+          throw new Error('Support employee cannot create customers for this retailer');
+        }
+      }
+
+      // Use a key to create warranty (retailer's key, not support employee's)
       const warrantyKey = await KeyManagementService.useKey(retailerId, companyId);
 
       // Get retailer's hierarchy
@@ -450,15 +979,20 @@ class CustomerService {
 
       await customer.save();
 
-      // Create audit log
-      await KeyManagementService.createAuditLog(
-        retailerId,
+      // Create audit log with proper attribution
+      const onBehalfOf = (creator.userType.includes('SUPPORT_EMPLOYEE') && actualCreator !== retailerId) 
+        ? { userId: retailerId, userType: retailer.userType, companyId: retailer.companyId }
+        : null;
+
+      await CompanyService.createAuditLog(
+        actualCreator,
         'CREATE',
         'CUSTOMER',
         customer.customerId,
         null,
         customer.toObject(),
-        companyId
+        companyId,
+        onBehalfOf
       );
 
       return customer;
@@ -467,23 +1001,49 @@ class CustomerService {
     }
   }
 
-  // Get customers accessible to a user based on hierarchy
+  // Get customers accessible to a user based on hierarchy and permissions
   static async getAccessibleCustomers(userId, companyId, filters = {}) {
     try {
-      // Get user's hierarchy
-      const hierarchy = await HierarchyService.getUserHierarchy(userId);
-      if (!hierarchy) return [];
+      const user = await User.findOne({ userId });
+      if (!user) return [];
 
-      // Get all users in hierarchy (children + self)
-      const accessibleUserIds = hierarchy.children.map(child => child.userId);
-      accessibleUserIds.push(userId);
+      let accessibleUserIds = [];
+
+      // Support employees have different access logic
+      if (user.userType.includes('SUPPORT_EMPLOYEE')) {
+        if (!user.supportPermissions.effectivePermissions.canViewCustomers) {
+          return [];
+        }
+        
+        const manageableUsers = await HierarchyService.getSupportEmployeeManageableUsers(userId);
+        accessibleUserIds = manageableUsers.map(u => u.userId);
+      } else {
+        // Regular hierarchy access
+        const hierarchy = await HierarchyService.getUserHierarchy(userId);
+        if (!hierarchy) return [];
+
+        accessibleUserIds = hierarchy.children.map(child => child.userId);
+        accessibleUserIds.push(userId);
+
+        // Add cross-company access for main company users
+        if (user.userType.startsWith('MAIN_')) {
+          const whitelabelUsers = await User.find({
+            companyId: { $in: hierarchy.crossCompanyAccess.map(access => access.companyId) }
+          });
+          accessibleUserIds.push(...whitelabelUsers.map(u => u.userId));
+        }
+      }
 
       // Build query
       const query = {
-        companyId,
         retailerId: { $in: accessibleUserIds },
         ...filters
       };
+
+      // Add company filter for non-main company users
+      if (!user.userType.startsWith('MAIN_') || user.userType.includes('SUPPORT_EMPLOYEE')) {
+        query.companyId = companyId;
+      }
 
       const customers = await Customer.find(query).sort({ 'dates.createdDate': -1 });
       return customers;
@@ -498,216 +1058,230 @@ class CustomerService {
       const customer = await Customer.findOne({ customerId });
       if (!customer) return false;
 
-      // Check if user has permission to access the retailer who created this customer
-      return await HierarchyService.checkUserPermission(userId, customer.retailerId);
+      const user = await User.findOne({ userId });
+      if (!user) return false;
+
+      // Support employees need specific permission and assignment
+      if (user.userType.includes('SUPPORT_EMPLOYEE')) {
+        if (!user.supportPermissions.effectivePermissions.canViewCustomers) {
+          return false;
+        }
+        return await HierarchyService.checkUserPermission(userId, customer.retailerId, 'VIEW_CUSTOMERS');
+      }
+
+      // Regular permission check
+      return await HierarchyService.checkUserPermission(userId, customer.retailerId, 'VIEW');
     } catch (error) {
-      throw new Error(`Error checking customer access: ${error.message}`);
+      return false;
     }
   }
 
-  // Update customer (only by main company, not whitelabel)
+  // Update customer (with support employee permission checks)
   static async updateCustomer(customerId, updateData, updatedBy, companyId) {
     try {
       const customer = await Customer.findOne({ customerId });
-      if (!customer) {
-        throw new Error('Customer not found');
+      const updater = await User.findOne({ userId: updatedBy });
+
+      if (!customer || !updater) {
+        throw new Error('Customer or updater not found');
       }
 
-      // Store old data for audit
+      // Check permissions
+      const canAccess = await this.canAccessCustomer(updatedBy, customerId);
+      if (!canAccess) {
+        throw new Error('No permission to update this customer');
+      }
+
+      // Additional check for support employees
+      if (updater.userType.includes('SUPPORT_EMPLOYEE')) {
+        if (!updater.supportPermissions.effectivePermissions.canEditCustomers) {
+          throw new Error('Support employee does not have permission to edit customers');
+        }
+      }
+
       const oldData = customer.toObject();
-
+      
       // Update customer
-      const updatedCustomer = await Customer.findOneAndUpdate(
-        { customerId },
-        {
-          ...updateData,
-          'dates.lastModifiedDate': new Date()
-        },
-        { new: true }
-      );
+      Object.assign(customer, updateData);
+      customer.dates.lastModifiedDate = new Date();
+      await customer.save();
 
-      // Create audit log
-      await KeyManagementService.createAuditLog(
+      // Create audit log with proper attribution
+      const onBehalfOf = (updater.userType.includes('SUPPORT_EMPLOYEE') && updatedBy !== customer.retailerId)
+        ? { userId: customer.retailerId, userType: 'RETAILER', companyId: customer.companyId }
+        : null;
+
+      await CompanyService.createAuditLog(
         updatedBy,
         'UPDATE',
         'CUSTOMER',
         customerId,
         oldData,
-        updatedCustomer.toObject(),
-        companyId
+        customer.toObject(),
+        companyId,
+        onBehalfOf
       );
 
-      return updatedCustomer;
+      return customer;
     } catch (error) {
       throw new Error(`Error updating customer: ${error.message}`);
     }
   }
 
-  // Get customer statistics for a user
+  // Get customer statistics (with support employee access control)
   static async getCustomerStats(userId, companyId) {
     try {
-      const hierarchy = await HierarchyService.getUserHierarchy(userId);
-      if (!hierarchy) return null;
-
-      const accessibleUserIds = hierarchy.children.map(child => child.userId);
-      accessibleUserIds.push(userId);
-
-      const stats = await Customer.aggregate([
-        {
-          $match: {
-            companyId,
-            retailerId: { $in: accessibleUserIds }
-          }
-        },
-        {
-          $group: {
-            _id: null,
-            totalCustomers: { $sum: 1 },
-            activeWarranties: {
-              $sum: {
-                $cond: [
-                  { $gte: ['$warrantyDetails.expiryDate', new Date()] },
-                  1,
-                  0
-                ]
-              }
-            },
-            expiredWarranties: {
-              $sum: {
-                $cond: [
-                  { $lt: ['$warrantyDetails.expiryDate', new Date()] },
-                  1,
-                  0
-                ]
-              }
-            },
-            totalPremium: { $sum: '$warrantyDetails.premiumAmount' }
-          }
-        }
-      ]);
-
-      return stats[0] || {
-        totalCustomers: 0,
-        activeWarranties: 0,
-        expiredWarranties: 0,
-        totalPremium: 0
+      const accessibleCustomers = await this.getAccessibleCustomers(userId, companyId);
+      
+      const stats = {
+        totalCustomers: accessibleCustomers.length,
+        activeWarranties: accessibleCustomers.filter(c => c.warrantyStatus === 'ACTIVE').length,
+        pendingPayments: accessibleCustomers.filter(c => c.paymentDetails.paymentStatus === 'PENDING').length,
+        completedPayments: accessibleCustomers.filter(c => c.paymentDetails.paymentStatus === 'PAID').length
       };
+
+      return stats;
     } catch (error) {
       throw new Error(`Error getting customer stats: ${error.message}`);
     }
   }
 }
 
-// Validation Service
+// Enhanced Validation Service
 class ValidationService {
   
-  // Validate user creation permissions
-  static async validateUserCreation(creatingUserId, newUserType, companyId) {
+  // Validate user creation with new user types and permissions
+  static async validateUserCreation(creatingUserId, newUserData, companyId) {
     try {
-      const creatingUser = await User.findOne({ userId: creatingUserId });
-      if (!creatingUser) {
-        throw new Error('Creating user not found');
+      const creator = await User.findOne({ userId: creatingUserId });
+      if (!creator) throw new Error('Creating user not found');
+
+      const { userType: newUserType } = newUserData;
+
+      // Support employees cannot create other users unless specifically permitted
+      if (creator.userType.includes('SUPPORT_EMPLOYEE')) {
+        if (!creator.supportPermissions.effectivePermissions.canCreateUsers) {
+          throw new Error('Support employee does not have permission to create users');
+        }
       }
 
-      // Retailers can only create customers, not other users
-      if (creatingUser.userType === 'RETAILER') {
-        throw new Error('Retailers can only create customers, not users');
-      }
-
-      // Define hierarchy levels
-      const hierarchyLevels = {
-        'TSM': 1,
-        'ASM': 2,
-        'SALES_EXECUTIVE': 3,
-        'SUPER_DISTRIBUTOR': 4,
-        'DISTRIBUTOR': 5,
-        'NATIONAL_DISTRIBUTOR': 6,
-        'MINI_DISTRIBUTOR': 7,
-        'RETAILER': 8
+      // Validate user type creation permissions
+      const userTypeValidation = {
+        'MAIN_OWNER': ['MAIN_OWNER'], // Only main owner can create another main owner
+        'MAIN_EMPLOYEE': ['MAIN_OWNER', 'MAIN_EMPLOYEE'],
+        'MAIN_SUPPORT_EMPLOYEE': ['MAIN_OWNER', 'MAIN_EMPLOYEE'],
+        'WHITELABEL_OWNER': ['MAIN_OWNER', 'MAIN_EMPLOYEE', 'WHITELABEL_OWNER'],
+        'WHITELABEL_EMPLOYEE': ['WHITELABEL_OWNER', 'WHITELABEL_EMPLOYEE'],
+        'WHITELABEL_SUPPORT_EMPLOYEE': ['WHITELABEL_OWNER', 'WHITELABEL_EMPLOYEE'],
+        // Legacy types
+        'TSM': ['MAIN_OWNER', 'MAIN_EMPLOYEE', 'WHITELABEL_OWNER'],
+        'ASM': ['TSM', 'MAIN_OWNER', 'MAIN_EMPLOYEE', 'WHITELABEL_OWNER'],
+        'SALES_EXECUTIVE': ['ASM', 'TSM', 'MAIN_OWNER', 'MAIN_EMPLOYEE', 'WHITELABEL_OWNER'],
+        'SUPER_DISTRIBUTOR': ['SALES_EXECUTIVE', 'ASM', 'TSM'],
+        'DISTRIBUTOR': ['SUPER_DISTRIBUTOR', 'SALES_EXECUTIVE', 'ASM', 'TSM'],
+        'NATIONAL_DISTRIBUTOR': ['DISTRIBUTOR', 'SUPER_DISTRIBUTOR', 'SALES_EXECUTIVE'],
+        'MINI_DISTRIBUTOR': ['NATIONAL_DISTRIBUTOR', 'DISTRIBUTOR', 'SUPER_DISTRIBUTOR'],
+        'RETAILER': ['MINI_DISTRIBUTOR', 'NATIONAL_DISTRIBUTOR', 'DISTRIBUTOR']
       };
 
-      const creatingUserLevel = hierarchyLevels[creatingUser.userType];
-      const newUserLevel = hierarchyLevels[newUserType];
+      const allowedCreators = userTypeValidation[newUserType] || [];
+      if (!allowedCreators.includes(creator.userType)) {
+        throw new Error(`User type ${creator.userType} cannot create user type ${newUserType}`);
+      }
 
-      // User can only create users at their level or below
-      if (newUserLevel <= creatingUserLevel) {
-        throw new Error('Cannot create user at higher or same hierarchy level');
+      // Company validation
+      if (newUserType.startsWith('MAIN_') && companyId !== creator.companyId) {
+        throw new Error('Main company users can only be created in the main company');
+      }
+
+      if (newUserType.startsWith('WHITELABEL_') && !creator.userType.startsWith('MAIN_') && companyId !== creator.companyId) {
+        throw new Error('White-label users can only be created in their own company unless created by main company user');
       }
 
       return true;
     } catch (error) {
-      throw new Error(`Validation error: ${error.message}`);
+      throw new Error(`User creation validation failed: ${error.message}`);
     }
   }
 
   // Validate unique fields
   static async validateUniqueFields(userData, excludeUserId = null) {
     try {
-      const emailQuery = { email: userData.email };
-      const phoneQuery = { phone: userData.phone };
+      const { email, phone, userId } = userData;
 
-      if (excludeUserId) {
-        emailQuery.userId = { $ne: excludeUserId };
-        phoneQuery.userId = { $ne: excludeUserId };
-      }
-
-      const existingEmailUser = await User.findOne(emailQuery);
-      const existingPhoneUser = await User.findOne(phoneQuery);
-
-      if (existingEmailUser) {
+      // Check email uniqueness
+      const emailExists = await User.findOne({ 
+        email: email.toLowerCase(),
+        userId: { $ne: excludeUserId }
+      });
+      if (emailExists) {
         throw new Error('Email already exists');
       }
 
-      if (existingPhoneUser) {
-        throw new Error('Phone number already exists');
+      // Check userId uniqueness (if provided)
+      if (userId) {
+        const userIdExists = await User.findOne({ 
+          userId,
+          userId: { $ne: excludeUserId }
+        });
+        if (userIdExists) {
+          throw new Error('User ID already exists');
+        }
       }
 
       return true;
     } catch (error) {
-      throw new Error(`Validation error: ${error.message}`);
+      throw new Error(`Unique field validation failed: ${error.message}`);
     }
   }
 
-  // Validate customer data
-  static async validateCustomerData(customerData, companyId) {
+  // Validate customer data (with support employee considerations)
+  static async validateCustomerData(customerData, companyId, creatingUserId = null) {
     try {
-      // Check if IMEI1 is unique
-      const existingIMEI = await Customer.findOne({
-        'productDetails.imei1': customerData.productDetails.imei1,
+      const { invoiceDetails, productDetails } = customerData;
+
+      // Check invoice number uniqueness within company
+      const invoiceExists = await Customer.findOne({
+        'invoiceDetails.invoiceNumber': invoiceDetails.invoiceNumber,
         companyId
       });
-
-      if (existingIMEI) {
-        throw new Error('IMEI1 already exists');
+      if (invoiceExists) {
+        throw new Error('Invoice number already exists in this company');
       }
 
-      // Check if invoice number is unique
-      const existingInvoice = await Customer.findOne({
-        'invoiceDetails.invoiceNumber': customerData.invoiceDetails.invoiceNumber,
-        companyId
+      // Check IMEI uniqueness globally
+      const imeiExists = await Customer.findOne({
+        'productDetails.imei1': productDetails.imei1
       });
-
-      if (existingInvoice) {
-        throw new Error('Invoice number already exists');
+      if (imeiExists) {
+        throw new Error('IMEI already exists');
       }
 
-      // Validate warranty dates
-      const startDate = new Date(customerData.warrantyDetails.startDate);
-      const expiryDate = new Date(customerData.warrantyDetails.expiryDate);
-
-      if (expiryDate <= startDate) {
-        throw new Error('Warranty expiry date must be after start date');
+      // If creator is support employee, validate they can create in this company
+      if (creatingUserId) {
+        const creator = await User.findOne({ userId: creatingUserId });
+        if (creator?.userType.includes('SUPPORT_EMPLOYEE')) {
+          const assignments = await SupportAssignmentService.getUserAssignments(creatingUserId);
+          const canCreateInCompany = assignments.some(a => 
+            a.assignmentType === 'COMPANY' && a.targetCompanyId === companyId
+          );
+          if (!canCreateInCompany) {
+            throw new Error('Support employee not assigned to this company');
+          }
+        }
       }
 
       return true;
     } catch (error) {
-      throw new Error(`Customer validation error: ${error.message}`);
+      throw new Error(`Customer data validation failed: ${error.message}`);
     }
   }
 }
 
-// Export all services
 module.exports = {
+  CompanyService,
+  SupportPermissionService,
+  SupportAssignmentService,
   HierarchyService,
   KeyManagementService,
   CustomerService,

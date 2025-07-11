@@ -1,347 +1,694 @@
-# 🏢 Whitelabel Company Registration Guide
+# 🏢 Multi-Tenant White-Label Company Setup Guide
 
-This guide explains how to register and manage whitelabel companies in the Extended Warranty Management system.
+This comprehensive guide explains how to set up and manage white-label companies in the new multi-tenant Extended Warranty Management system with enhanced support employee permissions and strict key management security.
 
-## 📋 Overview
+## 📋 System Architecture Overview
 
-The system supports multi-tenant whitelabel architecture where:
-- **Main Company**: The primary system administrator
-- **Whitelabel Companies**: Independent warranty providers with their own branding
-- **Hierarchical Users**: Each company has its own user hierarchy (TSM → ASM → Sales → Distributors → Retailers)
-
-## 🚀 Initial Setup
-
-### Step 1: Bootstrap the System
-
-First, you need to initialize the system with the main company and super admin:
-
-```bash
-npm run bootstrap
-```
-
-This will:
-- ✅ Create the main company
-- ✅ Create a super administrator (TSM user)
-- ✅ Set up initial key allocation
-- ✅ Provide login credentials
-
-**Default Credentials Created:**
-- Email: `superadmin@maincompany.com`
-- Password: `admin123`
-- User Type: TSM (Territory Sales Manager)
-
-### Step 2: Verify Setup
-
-Check if the bootstrap was successful:
-
-```bash
-npm run list-companies
-```
-
-You should see the main company listed with admin details.
-
-## 🏷️ Registering New Whitelabel Companies
-
-### Interactive Registration
-
-Run the interactive whitelabel registration script:
-
-```bash
-npm run register-whitelabel
-```
-
-The script will prompt you for:
-
-1. **Company Information**:
-   - Company Name
-   - Company Email
-   - Company Phone
-   - Complete Address
-
-2. **Key Allocation**:
-   - Total warranty keys to allocate
-   - Default: 1000 keys
-
-3. **Admin User**:
-   - Admin Name
-   - Admin Email
-   - Admin Phone
-   - Admin Password (default: admin123)
-   - User Type (TSM or ASM)
-
-### Example Registration Flow
-
-```
-🚀 Whitelabel Company Registration
-═══════════════════════════════════
-
-📋 Enter Company Information:
-────────────────────────────────
-
-Company Name: TechCare Warranties
-Company Email: admin@techcare.com
-Company Phone: +1-555-0123
-
-📍 Address Information:
-Street Address: 456 Tech Street
-City: San Francisco
-State/Province: CA
-Country: USA
-ZIP/Postal Code: 94105
-
-🔑 Key Allocation:
-Total Keys to Allocate (default: 1000): 2000
-
-👤 Admin User Information:
-─────────────────────────────────
-
-Admin Name: John Smith
-Admin Email: john@techcare.com
-Admin Phone: +1-555-0124
-Admin Password (default: admin123): mypassword123
-
-🏷️ Admin User Type:
-   1. TSM (Territory Sales Manager)
-   2. ASM (Area Sales Manager)
-Select user type (1 or 2, default: 1): 1
-
-📋 Registration Summary:
-─────────────────────────
-Company: TechCare Warranties
-Email: admin@techcare.com
-Admin: John Smith (TSM)
-Admin Email: john@techcare.com
-Total Keys: 2000
-
-✅ Create this whitelabel company? (y/N): y
-```
-
-## 📊 Managing Companies
-
-### List All Companies
-
-View all registered companies and their details:
-
-```bash
-npm run list-companies
-```
-
-This shows:
-- 🏢 Company details and status
-- 🔑 Key allocation and usage
-- 👤 Admin users for each company
-- 📊 System summary statistics
+The new system supports a sophisticated multi-tenant architecture:
 
 ### Company Structure
+- **Main Company**: Your primary company (only one exists)
+  - Creates and manages all white-label companies
+  - Has full cross-company access
+  - Manages global settings and key distribution
 
-Each whitelabel company includes:
+- **White-Label Companies**: Independent warranty providers
+  - Complete isolation from other white-labels
+  - Own branding, users, and hierarchy
+  - Independent key allocation and customer management
 
-```json
-{
-  "companyId": "COMP_1234567890_abc123def",
-  "name": "TechCare Warranties",
-  "email": "admin@techcare.com",
-  "phone": "+1-555-0123",
-  "address": {
-    "street": "456 Tech Street",
-    "city": "San Francisco",
-    "state": "CA",
-    "country": "USA",
-    "zipCode": "94105"
-  },
-  "keyAllocation": {
-    "totalKeys": 2000,
-    "usedKeys": 0,
-    "remainingKeys": 2000
-  },
-  "isActive": true
-}
+### User Hierarchy Structure
+```
+Main Company
+├── MAIN_OWNER (Full system access)
+├── MAIN_EMPLOYEE (Cross-company operations)
+└── MAIN_SUPPORT_EMPLOYEE (Assigned scope, NO key operations)
+
+White-Label Company
+├── WHITELABEL_OWNER (Full company access)
+├── WHITELABEL_EMPLOYEE (Company operations)
+├── WHITELABEL_SUPPORT_EMPLOYEE (Limited scope, NO key operations)
+└── Legacy Hierarchy (TSM → ASM → Sales → Distributors → Retailers)
 ```
 
-## 👤 User Hierarchy Setup
+## 🚀 Initial System Setup
 
-After registering a whitelabel company, the admin can create the user hierarchy:
+### Step 1: Initialize Main Company
 
-### 1. Login as Company Admin
+First-time setup creates your main company and primary owner:
 
+```bash
+npm run setup-main-company
+```
+
+**Interactive Setup Process:**
+```
+🏢 Multi-Tenant White-Label System Setup
+═══════════════════════════════════════
+
+Setting up Main Company...
+
+📋 Main Company Information:
+Company Name: TechWarranty Solutions
+Company Email: admin@techwarranty.com
+Company Phone: +1-555-0100
+
+📍 Company Address:
+Street: 123 Main Street
+City: San Francisco
+State: CA
+Country: USA
+ZIP Code: 94105
+
+👤 Main Owner Account:
+Owner Name: John Administrator
+Owner Email: john@techwarranty.com
+Owner Phone: +1-555-0101
+Owner Password: [auto-generated secure password]
+
+🔑 Initial Key Allocation: 10000
+
+✅ Main company setup completed!
+
+📊 System Summary:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company ID: MAIN_1735123456789_abc123def
+Company Type: MAIN
+Total Keys: 10,000
+Owner ID: USER_1735123456789_xyz789abc
+Owner Type: MAIN_OWNER
+
+🔑 Login Credentials:
+Email: john@techwarranty.com
+Password: SecureP@ssw0rd123!
+```
+
+**What Gets Created:**
+- ✅ Main company with `MAIN` type
+- ✅ Main owner user with `MAIN_OWNER` type
+- ✅ Initial key allocation (default: 10,000)
+- ✅ Company hierarchy structure
+- ✅ Audit trail initialization
+
+### Step 2: Verify Main Company Setup
+
+Check if the setup was successful:
+
+```bash
+# Test main owner login
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@techwarranty.com",
+    "password": "SecureP@ssw0rd123!"
+  }'
+
+# List companies (should show main company)
+curl -X GET http://localhost:3000/api/companies \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+## 🏷️ Creating White-Label Companies
+
+### Method 1: Interactive Script (Recommended)
+
+Use the interactive white-label creation script:
+
+```bash
+npm run create-whitelabel
+```
+
+**Interactive Process:**
+```
+🏢 White-Label Company Creation
+═══════════════════════════════════
+
+📋 Company Information:
+Company Name: TechCare Warranties
+Company Email: admin@techcare.com
+Company Phone: +1-555-0200
+
+📍 Company Address:
+Street: 456 Tech Avenue
+City: Austin
+State: TX
+Country: USA
+ZIP Code: 78701
+
+👤 White-Label Owner:
+Owner Name: Sarah Johnson
+Owner Email: sarah@techcare.com
+Owner Phone: +1-555-0201
+Owner Password: [auto-generated]
+
+🔑 Key Allocation:
+Keys to allocate: 2000
+
+📋 Company Registration Summary:
+Company: TechCare Warranties
+Type: WHITELABEL
+Owner: Sarah Johnson (WHITELABEL_OWNER)
+Keys: 2000
+
+✅ Create this white-label company? (y/N): y
+
+✅ White-label company created successfully!
+
+📊 Company Details:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Company ID: WL_1735123456789_def456ghi
+Parent Company: MAIN_1735123456789_abc123def
+Owner ID: USER_1735123456789_mno234pqr
+```
+
+### Method 2: API Creation
+
+Create white-label companies programmatically:
+
+```bash
+# Login as main company user first
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "john@techwarranty.com",
+    "password": "SecureP@ssw0rd123!"
+  }'
+
+# Create white-label company
+curl -X POST http://localhost:3000/api/companies \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "TechCare Warranties",
+    "email": "admin@techcare.com",
+    "phone": "+1-555-0200",
+    "address": {
+      "street": "456 Tech Avenue",
+      "city": "Austin",
+      "state": "TX",
+      "country": "USA",
+      "zipCode": "78701"
+    },
+    "keyAllocation": {
+      "totalKeys": 2000
+    },
+    "ownerDetails": {
+      "name": "Sarah Johnson",
+      "email": "sarah@techcare.com",
+      "phone": "+1-555-0201",
+      "password": "owner123"
+    }
+  }'
+```
+
+## 🔐 Support Employee Management
+
+### Creating Support Permission Sets
+
+Support employees use dynamic permission sets instead of fixed roles:
+
+```bash
+# Create permission set for customer support
+curl -X POST http://localhost:3000/api/permissions \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permissionName": "Customer Support Level 1",
+    "description": "Basic customer support with limited access",
+    "permissions": {
+      "canViewCustomers": true,
+      "canCreateCustomers": true,
+      "canEditCustomers": false,
+      "canDeleteCustomers": false,
+      "canViewUsers": true,
+      "canCreateUsers": false,
+      "canEditUsers": false,
+      "canDeleteUsers": false,
+      "canViewCompanyData": true,
+      "canEditCompanySettings": false,
+      "canViewClaims": true,
+      "canProcessClaims": true,
+      "canViewWarrantyPlans": true,
+      "canEditWarrantyPlans": false,
+      "canViewReports": true,
+      "canExportData": false,
+      "canViewKeyHistory": true,
+      "canAccessCrossCompany": false,
+      "hierarchyLevelAccess": 0
+    }
+  }'
+
+# Create advanced permission set
+curl -X POST http://localhost:3000/api/permissions \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "permissionName": "Senior Support Representative",
+    "description": "Advanced support with broader access",
+    "permissions": {
+      "canViewCustomers": true,
+      "canCreateCustomers": true,
+      "canEditCustomers": true,
+      "canDeleteCustomers": false,
+      "canViewUsers": true,
+      "canCreateUsers": true,
+      "canEditUsers": true,
+      "canDeleteUsers": false,
+      "canViewCompanyData": true,
+      "canEditCompanySettings": false,
+      "canViewClaims": true,
+      "canProcessClaims": true,
+      "canViewWarrantyPlans": true,
+      "canEditWarrantyPlans": true,
+      "canViewReports": true,
+      "canExportData": true,
+      "canViewKeyHistory": true,
+      "canAccessCrossCompany": true,
+      "hierarchyLevelAccess": 2
+    }
+  }'
+```
+
+### Registering Support Employees
+
+#### Main Company Support Employee
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Authorization: Bearer MAIN_OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Alex Support",
+    "email": "alex@techwarranty.com",
+    "phone": "+1-555-0150",
+    "password": "support123",
+    "userType": "MAIN_SUPPORT_EMPLOYEE",
+    "companyId": "MAIN_1735123456789_abc123def"
+  }'
+```
+
+#### White-Label Support Employee
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Authorization: Bearer WHITELABEL_OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Maria Support",
+    "email": "maria@techcare.com",
+    "phone": "+1-555-0250",
+    "password": "support123",
+    "userType": "WHITELABEL_SUPPORT_EMPLOYEE",
+    "companyId": "WL_1735123456789_def456ghi"
+  }'
+```
+
+### Assigning Permissions to Support Employees
+
+```bash
+# Assign permission set to support employee
+curl -X POST http://localhost:3000/api/permissions/assign \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "USER_SUPPORT_EMPLOYEE_ID",
+    "permissionSetId": "PERM_1735123456789_abc123def"
+  }'
+```
+
+### Creating Support Employee Assignments
+
+Support employees must be assigned to specific resources:
+
+#### Company Assignment (Access to entire white-label company)
+```bash
+curl -X POST http://localhost:3000/api/assignments \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "supportEmployeeId": "USER_SUPPORT_EMPLOYEE_ID",
+    "assignmentType": "COMPANY",
+    "targetCompanyId": "WL_1735123456789_def456ghi",
+    "accessScope": "LIMITED"
+  }'
+```
+
+#### User Assignment (Access to specific user and subordinates)
+```bash
+curl -X POST http://localhost:3000/api/assignments \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "supportEmployeeId": "USER_SUPPORT_EMPLOYEE_ID",
+    "assignmentType": "USER",
+    "targetUserId": "USER_RETAILER_ID",
+    "accessScope": "FULL"
+  }'
+```
+
+#### Hierarchy Assignment (Access to users up to certain level)
+```bash
+curl -X POST http://localhost:3000/api/assignments \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "supportEmployeeId": "USER_SUPPORT_EMPLOYEE_ID",
+    "assignmentType": "HIERARCHY",
+    "targetHierarchyLevel": 3,
+    "accessScope": "READ_ONLY"
+  }'
+```
+
+## 👤 User Hierarchy Creation
+
+### Creating White-Label User Hierarchy
+
+After setting up a white-label company, create the user hierarchy:
+
+#### 1. Login as White-Label Owner
 ```bash
 curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "john@techcare.com",
-    "password": "mypassword123"
+    "email": "sarah@techcare.com",
+    "password": "owner123"
   }'
 ```
 
-### 2. Create User Hierarchy
-
-Using the JWT token from login, create users in hierarchy order:
-
+#### 2. Create White-Label Employee
 ```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Authorization: Bearer WHITELABEL_OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mike Employee",
+    "email": "mike@techcare.com",
+    "phone": "+1-555-0202",
+    "password": "employee123",
+    "userType": "WHITELABEL_EMPLOYEE",
+    "companyId": "WL_1735123456789_def456ghi",
+    "parentUserId": "USER_1735123456789_mno234pqr"
+  }'
+```
+
+#### 3. Create Legacy Sales Hierarchy
+```bash
+# Create TSM
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Authorization: Bearer WHITELABEL_OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Tom Sales Manager",
+    "email": "tom@techcare.com",
+    "phone": "+1-555-0203",
+    "password": "tsm123",
+    "userType": "TSM",
+    "companyId": "WL_1735123456789_def456ghi",
+    "parentUserId": "USER_WHITELABEL_EMPLOYEE_ID"
+  }'
+
 # Create ASM under TSM
 curl -X POST http://localhost:3000/api/auth/register \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer TSM_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Jane Doe",
-    "email": "jane@techcare.com",
-    "phone": "+1-555-0125",
-    "password": "password123",
+    "name": "Anna Area Manager",
+    "email": "anna@techcare.com",
+    "phone": "+1-555-0204",
+    "password": "asm123",
     "userType": "ASM",
-    "companyId": "COMP_1234567890_abc123def",
-    "parentUserId": "USER_1234567890_xyz789abc"
+    "companyId": "WL_1735123456789_def456ghi",
+    "parentUserId": "USER_TSM_ID"
   }'
+
+# Continue creating: SALES_EXECUTIVE → DISTRIBUTOR → RETAILER
 ```
 
-Continue creating the hierarchy:
-- `TSM` → `ASM` → `SALES_EXECUTIVE` → `SUPER_DISTRIBUTOR` → `DISTRIBUTOR` → `RETAILER`
+## 🔑 Key Management & Distribution
 
-### 3. Allocate Keys
+### Key Allocation Rules
 
-Allocate warranty keys down the hierarchy:
+**Who Can Allocate Keys:**
+- ✅ Main Company Owner/Employee → Any white-label
+- ✅ White-label Owner/Employee → Within their company
+- ✅ Legacy users (TSM, ASM, etc.) → Down their hierarchy
+- ❌ **ALL Support Employees** → **CANNOT allocate keys**
 
+### Key Distribution Example
+
+#### 1. Main Company Allocates to White-Label
 ```bash
 curl -X POST http://localhost:3000/api/keys/allocate \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Authorization: Bearer MAIN_OWNER_JWT_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "toUserId": "USER_1234567890_xyz789abc",
-    "keyCount": 500
+    "toUserId": "USER_WHITELABEL_OWNER_ID",
+    "keyCount": 2000
   }'
 ```
 
-## 🔑 Key Management
-
-### Key Allocation Flow
-
-```
-Main Company (10,000 keys)
-└── Company A Admin (2,000 keys)
-    ├── ASM (1,000 keys)
-    │   ├── Sales Executive (500 keys)
-    │   └── Super Distributor (300 keys)
-    └── Distributor (200 keys)
-        └── Retailer (50 keys)
+#### 2. White-Label Owner Distributes to TSM
+```bash
+curl -X POST http://localhost:3000/api/keys/allocate \
+  -H "Authorization: Bearer WHITELABEL_OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toUserId": "USER_TSM_ID",
+    "keyCount": 1000
+  }'
 ```
 
-### Key Operations
+#### 3. Continue Down Hierarchy
+```bash
+# TSM → ASM
+curl -X POST http://localhost:3000/api/keys/allocate \
+  -H "Authorization: Bearer TSM_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toUserId": "USER_ASM_ID",
+    "keyCount": 500
+  }'
 
-- **Allocate**: Transfer keys from parent to child user
-- **Revoke**: Reclaim keys from child to parent user  
-- **Use**: Consume a key to create customer warranty
+# ASM → Distributor → Retailer
+# Continue allocation down the hierarchy
+```
 
-## 🌐 API Endpoints for Whitelabels
+### Key Restriction Verification
 
-### Company Management
-- `POST /api/companies` - Create company (Admin only)
-- `GET /api/companies/:id` - Get company details
-- `PUT /api/companies/:id` - Update company (Admin only)
+Test that support employees cannot perform key operations:
 
-### User Management
-- `POST /api/auth/register` - Register new user
-- `POST /api/auth/login` - User login
-- `GET /api/users/hierarchy` - Get user hierarchy
+```bash
+# This should fail with 403 Forbidden
+curl -X POST http://localhost:3000/api/keys/allocate \
+  -H "Authorization: Bearer SUPPORT_EMPLOYEE_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "toUserId": "USER_RETAILER_ID",
+    "keyCount": 10
+  }'
 
-### Key Management
-- `POST /api/keys/allocate` - Allocate keys
-- `POST /api/keys/revoke` - Revoke keys
-- `GET /api/keys/history` - Key transaction history
+# Expected response:
+{
+  "success": false,
+  "error": "Support employees cannot perform key operations."
+}
+```
 
-### Customer Management
-- `POST /api/customers` - Create customer warranty
-- `GET /api/customers` - List accessible customers
-- `PUT /api/customers/:id` - Update customer
+## 🛡️ Security & Access Control
 
-## 🔐 Security & Permissions
+### Company Isolation Testing
 
-### Access Control
+Verify white-labels cannot access each other's data:
 
-1. **Company Isolation**: Users can only access their company's data
-2. **Hierarchical Permissions**: Users can only manage their subordinates
-3. **Admin Privileges**: TSM/ASM can create companies and manage all users
-4. **Key Constraints**: Users cannot allocate more keys than they have
+```bash
+# White-label A trying to access White-label B's customers
+curl -X GET http://localhost:3000/api/customers \
+  -H "Authorization: Bearer WHITELABEL_A_JWT_TOKEN" \
+  -H "X-Company-ID: WL_COMPANY_B_ID"
 
-### Authentication
+# Should return 403 Forbidden
+```
 
-- JWT-based authentication
-- Token expiration: 24 hours (configurable)
-- Refresh token support
-- Password hashing with bcrypt
+### Cross-Company Access (Main Company Only)
+
+Main company users can access any white-label:
+
+```bash
+# Main company user accessing white-label data
+curl -X GET http://localhost:3000/api/customers \
+  -H "Authorization: Bearer MAIN_EMPLOYEE_JWT_TOKEN" \
+  -H "X-Company-ID: WL_1735123456789_def456ghi"
+
+# Should return white-label's customer data
+```
+
+### Support Employee Access Control
+
+Test support employee access restrictions:
+
+```bash
+# Support employee accessing assigned company - Should work
+curl -X GET http://localhost:3000/api/customers \
+  -H "Authorization: Bearer SUPPORT_EMPLOYEE_JWT_TOKEN"
+
+# Support employee accessing unassigned company - Should fail
+curl -X GET http://localhost:3000/api/customers \
+  -H "Authorization: Bearer SUPPORT_EMPLOYEE_JWT_TOKEN" \
+  -H "X-Company-ID: UNASSIGNED_COMPANY_ID"
+```
+
+## 📊 Managing Companies & Users
+
+### List All Companies
+```bash
+curl -X GET http://localhost:3000/api/companies \
+  -H "Authorization: Bearer MAIN_OWNER_JWT_TOKEN"
+```
+
+### Get Company Details
+```bash
+curl -X GET http://localhost:3000/api/companies/WL_1735123456789_def456ghi \
+  -H "Authorization: Bearer MAIN_OWNER_JWT_TOKEN"
+```
+
+### Update Company Information
+```bash
+curl -X PUT http://localhost:3000/api/companies/WL_1735123456789_def456ghi \
+  -H "Authorization: Bearer MAIN_OWNER_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "TechCare Premium Warranties",
+    "phone": "+1-555-0299"
+  }'
+```
+
+### View User Hierarchy
+```bash
+curl -X GET http://localhost:3000/api/users/USER_ID/hierarchy \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Get Support Employee Assignments
+```bash
+curl -X GET http://localhost:3000/api/assignments/user/USER_SUPPORT_EMPLOYEE_ID \
+  -H "Authorization: Bearer OWNER_JWT_TOKEN"
+```
 
 ## 🚨 Troubleshooting
 
 ### Common Issues
 
-#### 1. "System not initialized"
-```bash
-# Run bootstrap first
-npm run bootstrap
-```
+#### 1. "Main company already exists"
+**Solution:** Normal if you've run setup before. Use existing credentials or reset database for development.
 
-#### 2. "Company with this email already exists"
-```bash
-# Check existing companies
-npm run list-companies
-# Use different email or update existing company
-```
+#### 2. "Only main company users can create white-label companies"
+**Solution:** Ensure you're logged in as `MAIN_OWNER` or `MAIN_EMPLOYEE`.
 
-#### 3. "No permission to create company"
-```bash
-# Ensure you're logged in as TSM or ASM user
-# Check user type: TSM, ASM have admin privileges
-```
+#### 3. Support employee can't access assigned resources
+**Solutions:**
+- Check permission assignment: `GET /api/permissions/user/SUPPORT_ID`
+- Verify company assignment: `GET /api/assignments/user/SUPPORT_ID`
+- Ensure user type is correct: `MAIN_SUPPORT_EMPLOYEE` or `WHITELABEL_SUPPORT_EMPLOYEE`
 
-#### 4. "Invalid company ID"
-```bash
-# Verify company exists and is active
-npm run list-companies
-```
+#### 4. "Support employees cannot perform key operations"
+**This is expected behavior** - Support employees are strictly prohibited from key operations for security.
 
-### Database Issues
+#### 5. White-label isolation not working
+**Check:**
+- Company IDs are correct
+- User belongs to expected company
+- No cross-company access being granted incorrectly
 
-#### Reset System (Development Only)
+### Database Reset (Development Only)
 ```bash
 # Connect to MongoDB
-mongo warranty_management
+mongo multi_tenant_warranty
 
-# Drop all collections
+# Drop collections (DEVELOPMENT ONLY)
 db.companies.drop()
 db.users.drop()
+db.userhierarchies.drop()
+db.supportpermissions.drop()
+db.supportassignments.drop()
 db.customers.drop()
 db.keymanagements.drop()
 
-# Re-run bootstrap
-npm run bootstrap
+# Re-run setup
+npm run setup-main-company
 ```
 
-## 📞 Support
+## 📈 Best Practices
 
-For additional help:
-
-1. Check the main [README.md](./README.md) for API documentation
-2. Visit http://localhost:3000/docs for Swagger API reference
-3. Review the [QUICK_START.md](./QUICK_START.md) for basic setup
-4. Check application logs for error details
-
-## 🎯 Best Practices
-
-### Company Registration
-- Use meaningful company names and emails
-- Allocate appropriate key quantities based on expected volume
-- Set up proper address information for reporting
+### Company Management
+- Use descriptive company names and emails
+- Set appropriate key allocations based on expected volume
+- Maintain proper address information for compliance
+- Regular audit of company statuses and key usage
 
 ### User Management
-- Follow the hierarchical structure strictly
-- Assign appropriate key allocations at each level
-- Use descriptive user names and valid contact information
+- Follow strict hierarchy creation order
+- Use strong passwords for all user accounts
+- Assign appropriate user types based on responsibilities
+- Regular review of user permissions and access
+
+### Support Employee Management
+- Create specific permission sets for different support levels
+- Assign minimal required permissions (principle of least privilege)
+- Regular review of support employee assignments
+- Monitor support employee actions through audit logs
 
 ### Key Management
 - Monitor key usage and allocation regularly
 - Plan key distribution based on business requirements
 - Set up alerts for low key counts
+- Regular audit of key transactions
 
 ### Security
-- Change default passwords immediately
-- Use strong passwords for admin accounts
-- Regularly audit user permissions and access
-- Monitor login activities and suspicious behavior
+- Change all default passwords immediately
+- Use environment variables for sensitive configuration
+- Regular security audits of user permissions
+- Monitor cross-company access patterns
+- Review audit logs for unusual activity
+
+## 📚 Advanced Configuration
+
+### Environment Variables for Production
+```env
+NODE_ENV=production
+MONGODB_URI=mongodb://your-production-cluster
+JWT_SECRET=your-very-secure-jwt-secret-key
+JWT_REFRESH_SECRET=your-secure-refresh-secret-key
+
+# Main company configuration
+MAIN_COMPANY_NAME=Your Production Company Name
+MAIN_COMPANY_EMAIL=admin@yourcompany.com
+MAIN_OWNER_EMAIL=owner@yourcompany.com
+
+# Security settings
+JWT_EXPIRES_IN=24h
+JWT_REFRESH_EXPIRES_IN=7d
+BCRYPT_ROUNDS=12
+
+# Rate limiting
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+```
+
+### Monitoring and Alerts
+- Set up MongoDB monitoring for performance
+- Create alerts for unusual key allocation patterns
+- Monitor support employee activity
+- Track cross-company access patterns
+- Alert on failed authorization attempts
+
+## 📞 Support
+
+For additional help:
+
+1. **Complete Architecture**: Review [NEW_SCHEMA_DOCUMENTATION.md](./NEW_SCHEMA_DOCUMENTATION.md)
+2. **API Reference**: http://localhost:3000/docs
+3. **Quick Start**: [QUICK_START.md](./QUICK_START.md)
+4. **Main Documentation**: [README.md](./README.md)
+5. **Issues**: Create an issue in the repository
+
+---
+
+**Your multi-tenant white-label system with secure support employee management is now fully configured! 🚀**
