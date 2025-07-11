@@ -13,7 +13,14 @@ The system supports multi-tenant whitelabel architecture where:
 
 ### Step 1: Bootstrap the System
 
-First, you need to initialize the system with the main company and super admin:
+First, ensure environment variables are configured (the `.env` file should already exist):
+
+```bash
+# Verify .env file exists with JWT_SECRET
+cat .env | grep JWT_SECRET
+```
+
+Then initialize the system with the main company and super admin:
 
 ```bash
 npm run bootstrap

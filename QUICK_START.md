@@ -74,8 +74,11 @@ Download from [MongoDB Official Site](https://www.mongodb.com/try/download/commu
 # Install dependencies
 npm install
 
-# Copy environment file
+# Copy environment file (IMPORTANT!)
 cp .env.example .env
+
+# The .env file is already created with default values
+# In production, change JWT_SECRET and JWT_REFRESH_SECRET!
 
 # Start development server
 npm run dev
