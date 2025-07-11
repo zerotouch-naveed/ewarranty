@@ -8,7 +8,10 @@
     "dev": "nodemon app.js",
     "test": "jest",
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint:fix": "eslint . --fix",
+    "bootstrap": "node scripts/bootstrap.js",
+    "register-whitelabel": "node scripts/register-whitelabel.js",
+    "list-companies": "node scripts/list-companies.js"
   },
   "keywords": [
     "warranty",
