@@ -1,5 +1,27 @@
 #!/usr/bin/env node
 
+console.log('⚠️  DEPRECATED: bootstrap.js');
+console.log('═════════════════════════════');
+console.log('This script is deprecated in the multi-tenant white-label system.');
+console.log('Please use the new setup process instead:');
+console.log('');
+console.log('🚀 For new installations:');
+console.log('   npm run setup-main-company');
+console.log('');
+console.log('🏷️ To create white-label companies:');
+console.log('   npm run create-whitelabel');
+console.log('');
+console.log('📊 To view system overview:');
+console.log('   npm run list-system');
+console.log('');
+console.log('📚 Documentation:');
+console.log('   • Setup Guide: WHITELABEL_SETUP.md');
+console.log('   • Architecture: NEW_SCHEMA_DOCUMENTATION.md');
+console.log('   • Quick Start: QUICK_START.md');
+console.log('');
+console.log('❌ This script will not run and may cause data conflicts.');
+process.exit(1);
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
