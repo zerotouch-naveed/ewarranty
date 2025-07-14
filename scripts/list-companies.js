@@ -1,5 +1,30 @@
 #!/usr/bin/env node
 
+console.log('⚠️  DEPRECATED: list-companies.js');
+console.log('═══════════════════════════════════');
+console.log('This script is deprecated in the multi-tenant white-label system.');
+console.log('Please use the new system overview instead:');
+console.log('');
+console.log('📊 View comprehensive system overview:');
+console.log('   npm run list-system');
+console.log('');
+console.log('🛠️ Manage support permissions:');
+console.log('   npm run manage-permissions');
+console.log('');
+console.log('🔧 Assign support employees:');
+console.log('   npm run assign-support');
+console.log('');
+console.log('🏷️ Create white-label companies:');
+console.log('   npm run create-whitelabel');
+console.log('');
+console.log('📚 Documentation:');
+console.log('   • Setup Guide: WHITELABEL_SETUP.md');
+console.log('   • Architecture: NEW_SCHEMA_DOCUMENTATION.md');
+console.log('   • Quick Start: QUICK_START.md');
+console.log('');
+console.log('❌ This script will not run and may provide incomplete information.');
+process.exit(1);
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const { Company, User } = require('../schemas');
