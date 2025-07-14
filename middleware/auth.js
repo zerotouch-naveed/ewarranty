@@ -377,11 +377,11 @@ const requireSuperAdmin = async (request, reply) => {
 };
 
 const requireAdmin = async (request, reply) => {
-  // Map to owners and employees for backward compatibility
-  if (!request.user || (!request.user.isOwner && !request.user.isEmployee && !['TSM', 'ASM'].includes(request.user.userType))) {
+  // Only owners can perform admin actions (e.g., add companies)
+  if (!request.user || !request.user.isOwner) {
     return reply.code(403).send({ 
       success: false,
-      error: 'Access denied. Admin privileges required.' 
+      error: 'Access denied. Owner privileges required.' 
     });
   }
 };

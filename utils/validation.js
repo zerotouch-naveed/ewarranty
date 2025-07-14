@@ -8,7 +8,7 @@
    warrantyKey: /^WK_\d+_[A-Z0-9]{9}$/,
    userId: /^USER_\d+_[a-z0-9]{9}$/,
    customerId: /^CUST_\d+_[a-z0-9]{9}$/,
-   companyId: /^COMP_\d+_[a-z0-9]{9}$/
+   companyId: /^COMPANY_\d+_[a-z0-9]{9}$/
  };
  
  // User validation schemas
@@ -22,6 +22,7 @@
        'TSM', 'ASM', 'SALES_EXECUTIVE', 'SUPER_DISTRIBUTOR', 
        'DISTRIBUTOR', 'NATIONAL_DISTRIBUTOR', 'MINI_DISTRIBUTOR', 'RETAILER'
      ).required(),
+     companyId: Joi.string().pattern(patterns.companyId).required(),
      parentUserId: Joi.string().pattern(patterns.userId).allow(null),
      alternatePhone: Joi.string().pattern(patterns.phone).allow(null, ''),
      address: Joi.object({

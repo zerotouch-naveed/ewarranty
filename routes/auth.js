@@ -13,13 +13,13 @@
    
    // Register new user
    fastify.post('/register', {
-     preHandler: [validate(userValidation.register)],
+     preHandler: [authenticate, validate(userValidation.register)],
      schema: {
        description: 'Register a new user',
        tags: ['Authentication'],
        body: {
          type: 'object',
-         required: ['name', 'email', 'phone', 'password', 'userType', 'companyId'],
+         required: ['name', 'email', 'phone', 'password', 'userType'],
          properties: {
            name: { type: 'string', minLength: 2, maxLength: 50 },
            email: { type: 'string', format: 'email' },
@@ -29,8 +29,6 @@
              type: 'string', 
              enum: ['TSM', 'ASM', 'SALES_EXECUTIVE', 'SUPER_DISTRIBUTOR', 'DISTRIBUTOR', 'NATIONAL_DISTRIBUTOR', 'MINI_DISTRIBUTOR', 'RETAILER'] 
            },
-           companyId: { type: 'string' },
-           parentUserId: { type: 'string' },
            alternatePhone: { type: 'string' },
            address: {
              type: 'object',
@@ -63,10 +61,11 @@
        }
      }
    }, catchAsync(async (request, reply) => {
-     const { name, email, phone, password, userType, companyId, parentUserId, alternatePhone, address } = request.body;
- 
-     // Check if company exists
-     const company = await Company.findOne({ companyId, isActive: true });
+     const { name, email, phone, password, userType, alternatePhone, address } = request.body;
+      console.log('request.body     ',request.body);
+      
+     
+     const company = await Company.findOne({ companyId: request.user.companyId, isActive: true });
      if (!company) {
        return reply.code(400).send({
          success: false,
@@ -93,14 +92,15 @@
      // Create user
      const user = new User({
        userId: `USER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-       companyId,
+       companyId: request.user.companyId,
+       parentUserId: request.user.userId,
        userType,
        name,
        email: email.toLowerCase(),
        phone,
        alternatePhone,
        password: hashedPassword,
-       parentUserId,
+       isActive: true,
        address,
        hierarchyLevel: parentUserId ? 1 : 0
      });
@@ -110,7 +110,7 @@
      // Create hierarchy if parent user exists
      if (parentUserId) {
        const HierarchyService = require('../services').HierarchyService;
-       await HierarchyService.createUserHierarchy(user.userId, parentUserId, companyId);
+       await HierarchyService.createUserHierarchy(user.userId, request.user.user, request.user.companyId);
      }
  
      // Generate tokens
@@ -126,7 +126,7 @@
      // Create audit log
      const auditLog = new AuditLog({
        logId: `LOG_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-       companyId,
+       companyId:request.user.companyId,
        userId: user.userId,
        action: 'CREATE',
        entityType: 'USER',

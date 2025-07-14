@@ -1,4 +1,4 @@
- const { Company, AuditLog } = require('../schemas');
+ const { User, Company, AuditLog } = require('../schemas');
  const { authenticate, requireAdmin } = require('../middleware/auth');
  const { validate, companyValidation } = require('../utils/validation');
  const { catchAsync } = require('../middleware/errorHandler');
@@ -7,38 +7,169 @@
    
    // Create Company (Admin only)
    fastify.post('/', {
-     preHandler: [authenticate, requireAdmin, validate(companyValidation.create)],
+     preHandler: [authenticate, requireAdmin],
      schema: {
-       description: 'Create a new company',
+       description: 'Create a new white-label company (and owner)',
        tags: ['Companies'],
-       security: [{ Bearer: [] }]
+       security: [{ Bearer: [] }],
+       body: {
+         type: 'object',
+         required: ['name', 'email', 'phone', 'address', 'totalKeys', 'owner'],
+         properties: {
+           name: { type: 'string', minLength: 2, maxLength: 100 },
+           email: { type: 'string', format: 'email' },
+           phone: { type: 'string', minLength: 10, maxLength: 15 },
+           address: {
+             type: 'object',
+             required: ['street', 'city', 'state', 'country', 'zipCode'],
+             properties: {
+               street: { type: 'string', maxLength: 100 },
+               city: { type: 'string', maxLength: 50 },
+               state: { type: 'string', maxLength: 50 },
+               country: { type: 'string', maxLength: 50 },
+               zipCode: { type: 'string', maxLength: 10 }
+             }
+           },
+           totalKeys: { type: 'integer', minimum: 1 },
+           branding: {
+             type: 'object',
+             properties: {
+               logo: { type: 'string' },
+               primaryColor: { type: 'string' },
+               secondaryColor: { type: 'string' }
+             },
+             default: {}
+           },
+           owner: {
+             type: 'object',
+             required: ['name', 'email', 'phone', 'password'],
+             properties: {
+               name: { type: 'string', minLength: 2, maxLength: 100 },
+               email: { type: 'string', format: 'email' },
+               phone: { type: 'string', minLength: 10, maxLength: 15 },
+               password: { type: 'string', minLength: 8, maxLength: 128 }
+             }
+           }
+         }
+       },
+       response: {
+         201: {
+           type: 'object',
+           properties: {
+             success: { type: 'boolean' },
+             message: { type: 'string' },
+             data: {
+               type: 'object',
+               properties: {
+                 company: { type: 'object' },
+                 owner: { type: 'object' }
+               }
+             }
+           }
+         },
+         400: {
+           type: 'object',
+           properties: {
+             success: { type: 'boolean' },
+             error: { type: 'string' }
+           }
+         },
+         403: {
+           type: 'object',
+           properties: {
+             success: { type: 'boolean' },
+             error: { type: 'string' }
+           }
+         }
+       }
      }
    }, catchAsync(async (request, reply) => {
-     const companyData = request.body;
- 
-     // Check if company already exists
-     const existingCompany = await Company.findOne({
-       $or: [
-         { email: companyData.email },
-         { name: companyData.name }
-       ]
-     });
- 
-     if (existingCompany) {
-       return reply.code(400).send({
-         success: false,
-         error: 'Company already exists with this name or email'
-       });
+     const { name, email, phone, address, totalKeys, branding = {}, owner } = request.body;
+     const parentCompany = await Company.findOne({ companyId: request.user.companyId, companyType: 'MAIN' });
+     if (!parentCompany) {
+       return reply.code(400).send({ success: false, error: 'Parent (main) company not found.' });
      }
- 
+     if (parentCompany.keyAllocation.remainingKeys < totalKeys) {
+       return reply.code(400).send({ success: false, error: `Not enough keys available. Main company has ${parentCompany.keyAllocation.remainingKeys} keys remaining.` });
+     }
+     // Check for duplicate company or owner
+     const existingCompany = await Company.findOne({ email });
+     if (existingCompany) {
+       return reply.code(400).send({ success: false, error: 'Company with this email already exists.' });
+     }
+     const existingOwner = await User.findOne({ email: owner.email });
+     if (existingOwner) {
+       return reply.code(400).send({ success: false, error: 'User with this email already exists.' });
+     }
+     // Create company
      const company = new Company({
-       ...companyData,
-       companyId: `COMP_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      companyId: `COMPANY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+       companyType: 'WHITELABEL',
+       parentCompanyId: parentCompany.companyId,
+       name,
+       email,
+       phone,
+       address,
+       branding,
+       keyAllocation: {
+         totalKeys,
+         usedKeys: 0,
+         remainingKeys: totalKeys
+       },
+       settings: {
+         timezone: 'UTC',
+         currency: 'INR'
+       },
+       createdBy: request.user.userId
      });
- 
      await company.save();
- 
+     // Update main company key allocation
+     await Company.findByIdAndUpdate(parentCompany._id, {
+       $inc: {
+         'keyAllocation.usedKeys': totalKeys,
+         'keyAllocation.remainingKeys': -totalKeys
+       }
+     });
+     // Create owner user
+     const bcrypt = require('bcrypt');
+     const hashedPassword = await bcrypt.hash(owner.password, 12);
+     const ownerUser = new User({
+       userId: `USER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+       companyId: company.companyId,
+       userType: 'WHITELABEL_OWNER',
+       name: owner.name,
+       email: owner.email,
+       phone: owner.phone,
+       password: hashedPassword,
+       isActive: true,
+       parentUserId: null,
+       hierarchyLevel: 0,
+       keyAllocation: {
+         totalKeys,
+         usedKeys: 0,
+         remainingKeys: totalKeys
+       },
+       permissions: {
+         canCreateUser: true,
+         canEditUser: true,
+         canViewReports: true,
+         canManageKeys: true
+       },
+       supportPermissions: {
+         permissionSetId: null,
+         assignedBy: null,
+         assignedAt: null,
+         effectivePermissions: {}
+       },
+       assignedCompanies: [],
+       createdBy: request.user.userId
+     });
+     await ownerUser.save();
+     // Create user hierarchy
+     const { HierarchyService } = require('../services');
+     await HierarchyService.createUserHierarchy(ownerUser.userId, null, company.companyId);
      // Create audit log
+     const { AuditLog } = require('../schemas');
      const auditLog = new AuditLog({
        logId: `LOG_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
        companyId: request.user.companyId,
@@ -49,13 +180,19 @@
        newData: company.toObject()
      });
      await auditLog.save();
- 
      return reply.code(201).send({
        success: true,
-       message: 'Company created successfully',
-       data: { company }
+       message: 'Company and owner created successfully',
+       data: {
+         company: company.toObject(),
+         owner: { ...ownerUser.toObject(), password: undefined }
+       }
      });
    }));
+
+
+
+   
  
    // Get Company Details
    fastify.get('/:companyId', {
