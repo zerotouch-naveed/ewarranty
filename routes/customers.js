@@ -7,13 +7,96 @@
    
    // Create Customer (Retailers only)
    fastify.post('/', {
-     preHandler: [authenticate, requireRetailer],
-     schema: {
-       description: 'Create a new customer warranty',
-       tags: ['Customers'],
-       security: [{ Bearer: [] }]
-     }
-   }, catchAsync(async (request, reply) => {
+  preHandler: [authenticate, requireRetailer],
+  schema: {
+    description: 'Create a new customer warranty',
+    tags: ['Customers'],
+    security: [{ Bearer: [] }],
+    body: {
+      type: 'object',
+      required: ['customerDetails', 'productDetails', 'invoiceDetails', 'productImages', 'warrantyDetails'],
+      properties: {
+        customerDetails: {
+          type: 'object',
+          required: ['name', 'mobile'],
+          properties: {
+            name: { type: 'string' },
+            email: { type: 'string', format: 'email' },
+            mobile: { type: 'string' },
+            alternateNumber: { type: 'string' },
+            address: {
+              type: 'object',
+              properties: {
+                street: { type: 'string' },
+                city: { type: 'string' },
+                state: { type: 'string' },
+                country: { type: 'string' },
+                zipCode: { type: 'string' }
+              }
+            }
+          }
+        },
+        productDetails: {
+          type: 'object',
+          required: ['imei1'],
+          properties: {
+            modelName: { type: 'string' },
+            imei1: { type: 'string' },
+            imei2: { type: 'string' },
+            brand: { type: 'string' },
+            category: { type: 'string' },
+            purchasePrice: { type: 'number' }
+          }
+        },
+        invoiceDetails: {
+          type: 'object',
+          required: ['invoiceNumber', 'invoiceImage', 'invoiceDate'],
+          properties: {
+            invoiceNumber: { type: 'string' },
+            invoiceAmount: { type: 'number' },
+            invoiceImage: { type: 'string', format: 'uri' },
+            invoiceDate: { type: 'string', format: 'date' }
+          }
+        },
+        productImages: {
+          type: 'object',
+          required: ['frontImage', 'backImage'],
+          properties: {
+            frontImage: { type: 'string', format: 'uri' },
+            backImage: { type: 'string', format: 'uri' },
+            additionalImages: {
+              type: 'array',
+              items: { type: 'string', format: 'uri' }
+            }
+          }
+        },
+        warrantyDetails: {
+          type: 'object',
+          required: ['startDate', 'expiryDate'],
+          properties: {
+            planId: { type: 'string' },
+            planName: { type: 'string' },
+            warrantyPeriod: { type: 'number' },
+            startDate: { type: 'string', format: 'date' },
+            expiryDate: { type: 'string', format: 'date' },
+            premiumAmount: { type: 'number' }
+          }
+        },
+        paymentDetails: {
+          type: 'object',
+          properties: {
+            paymentStatus: { type: 'string', enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] },
+            paymentDate: { type: 'string', format: 'date' },
+            paymentMethod: { type: 'string' },
+            paymentOrderId: { type: 'string' },
+            paymentId: { type: 'string' },
+            transactionId: { type: 'string' }
+          }
+        }
+      }
+    }
+  }
+}, catchAsync(async (request, reply) => {
      const customer = await CustomerService.createCustomer(
        request.body,
        request.user.userId,
@@ -50,7 +133,8 @@
      const customers = await CustomerService.getAccessibleCustomers(
        request.user.userId,
        request.user.companyId,
-       filters
+       request.user.userType,
+       filters,
      );
  
      return reply.send({

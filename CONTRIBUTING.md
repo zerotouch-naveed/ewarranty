@@ -90,7 +90,7 @@ const customers = await Customer.find({});
 const customers = await Customer.find({ companyId: user.companyId });
 
 // ✅ Better - Using service with permission check
-const customers = await CustomerService.getAccessibleCustomers(userId, companyId);
+const customers = await CustomerService.getAccessibleCustomers(userId, companyId, userType);
 ```
 
 #### 2. **Support Employee Restrictions**

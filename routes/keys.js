@@ -10,7 +10,15 @@ async function keyRoutes(fastify, options) {
     schema: {
       description: 'Allocate keys to user',
       tags: ['Key Management'],
-      security: [{ Bearer: [] }]
+      security: [{ Bearer: [] }],
+      body: {
+         type: 'object',
+         required: ['toUserId', 'keyCount'],
+         properties: {
+           toUserId: { type: 'string' },
+           keyCount: { type: 'integer', minimum: 1 }
+         }
+       },
     }
   }, catchAsync(async (request, reply) => {
     const { toUserId, keyCount } = request.body;

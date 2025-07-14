@@ -432,7 +432,6 @@ const userHierarchySchema = new Schema({
     required: true,
     ref: 'Company'
   },
-  // Cross-company hierarchy for main company employees
   crossCompanyAccess: [{
     companyId: {
       type: String,
@@ -449,52 +448,15 @@ const userHierarchySchema = new Schema({
       type: String,
       ref: 'User'
     },
-    userType: {
-      type: String,
-      enum: [
-        'MAIN_OWNER', 'MAIN_EMPLOYEE', 'MAIN_SUPPORT_EMPLOYEE',
-        'WHITELABEL_OWNER', 'WHITELABEL_EMPLOYEE', 'WHITELABEL_SUPPORT_EMPLOYEE',
-        'TSM', 'ASM', 'SALES_EXECUTIVE', 'SUPER_DISTRIBUTOR', 'DISTRIBUTOR', 
-        'NATIONAL_DISTRIBUTOR', 'MINI_DISTRIBUTOR', 'RETAILER'
-      ]
-    },
-    level: Number,
-    name: String
+    userType: String,
+    name: String,
+    level: Number
   }],
   directParent: {
-    userId: {
-      type: String,
-      ref: 'User'
-    },
+    userId: { type: String, ref: 'User' },
     userType: String,
     name: String
   },
-  allParents: [{
-    userId: {
-      type: String,
-      ref: 'User'
-    },
-    userType: String,
-    name: String,
-    level: Number
-  }],
-  directChildren: [{
-    userId: {
-      type: String,
-      ref: 'User'
-    },
-    userType: String,
-    name: String
-  }],
-  allChildren: [{
-    userId: {
-      type: String,
-      ref: 'User'
-    },
-    userType: String,
-    name: String,
-    level: Number
-  }],
   createdAt: {
     type: Date,
     default: Date.now

@@ -17,6 +17,7 @@
      schema: {
        description: 'Register a new user',
        tags: ['Authentication'],
+       security: [{ Bearer: [] }],
        body: {
          type: 'object',
          required: ['name', 'email', 'phone', 'password', 'userType'],
@@ -62,8 +63,6 @@
      }
    }, catchAsync(async (request, reply) => {
      const { name, email, phone, password, userType, alternatePhone, address } = request.body;
-      console.log('request.body     ',request.body);
-      
      
      const company = await Company.findOne({ companyId: request.user.companyId, isActive: true });
      if (!company) {
@@ -88,7 +87,7 @@
      // Hash password
      const saltRounds = parseInt(process.env.BCRYPT_ROUNDS) || 12;
      const hashedPassword = await bcrypt.hash(password, saltRounds);
- 
+     const parentUserId = request.user.userId;
      // Create user
      const user = new User({
        userId: `USER_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -102,7 +101,7 @@
        password: hashedPassword,
        isActive: true,
        address,
-       hierarchyLevel: parentUserId ? 1 : 0
+       hierarchyLevel: request.user.userId ? 1 : 0
      });
  
      await user.save();
@@ -110,9 +109,8 @@
      // Create hierarchy if parent user exists
      if (parentUserId) {
        const HierarchyService = require('../services').HierarchyService;
-       await HierarchyService.createUserHierarchy(user.userId, request.user.user, request.user.companyId);
+       await HierarchyService.createUserHierarchy(user.userId, parentUserId, request.user.companyId);
      }
- 
      // Generate tokens
      const tokenPayload = {
        userId: user.userId,
@@ -413,7 +411,7 @@
        security: [{ Bearer: [] }]
      }
    }, catchAsync(async (request, reply) => {
-     const userResponse = request.user.toObject();
+     const userResponse = request.user;
      delete userResponse.password;
  
      return reply.send({

@@ -22,8 +22,8 @@
        'TSM', 'ASM', 'SALES_EXECUTIVE', 'SUPER_DISTRIBUTOR', 
        'DISTRIBUTOR', 'NATIONAL_DISTRIBUTOR', 'MINI_DISTRIBUTOR', 'RETAILER'
      ).required(),
-     companyId: Joi.string().pattern(patterns.companyId).required(),
-     parentUserId: Joi.string().pattern(patterns.userId).allow(null),
+     companyId: Joi.string().pattern(patterns.companyId),
+     parentUserId: Joi.string().pattern(patterns.userId),
      alternatePhone: Joi.string().pattern(patterns.phone).allow(null, ''),
      address: Joi.object({
        street: Joi.string().max(100),

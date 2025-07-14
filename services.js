@@ -366,19 +366,16 @@ class SupportAssignmentService {
 
 // Enhanced Hierarchy Management Service
 class HierarchyService {
-  
-  // Create or update user hierarchy when a new user is created
   static async createUserHierarchy(userId, parentUserId = null, companyId) {
     try {
       const user = await User.findOne({ userId });
       if (!user) throw new Error('User not found');
 
       let hierarchyPath = [];
-      let allParents = [];
       let directParent = null;
       let crossCompanyAccess = [];
 
-      // Handle cross-company access for main company users
+      // Cross-company access for MAIN users
       if (user.userType.startsWith('MAIN_')) {
         const whitelabelCompanies = await Company.find({ companyType: 'WHITELABEL' });
         crossCompanyAccess = whitelabelCompanies.map(company => ({
@@ -387,11 +384,10 @@ class HierarchyService {
         }));
       }
 
-      // If user has a parent, build hierarchy path
       if (parentUserId) {
-        const parentHierarchy = await UserHierarchy.findOne({ userId: parentUserId });
         const parent = await User.findOne({ userId: parentUserId });
-        
+        const parentHierarchy = await UserHierarchy.findOne({ userId: parentUserId });
+
         if (parent) {
           directParent = {
             userId: parent.userId,
@@ -399,30 +395,19 @@ class HierarchyService {
             name: parent.name
           };
 
-          // Build hierarchy path from parent's path
           if (parentHierarchy) {
             hierarchyPath = [...parentHierarchy.hierarchyPath];
-            allParents = [...parentHierarchy.allParents];
           }
-          
-          // Add current parent to the path
+
           hierarchyPath.push({
             userId: parent.userId,
             userType: parent.userType,
-            level: hierarchyPath.length,
-            name: parent.name
-          });
-
-          allParents.push({
-            userId: parent.userId,
-            userType: parent.userType,
             name: parent.name,
-            level: hierarchyPath.length - 1
+            level: hierarchyPath.length
           });
         }
       }
 
-      // Create or update user hierarchy
       const hierarchy = await UserHierarchy.findOneAndUpdate(
         { userId },
         {
@@ -430,18 +415,10 @@ class HierarchyService {
           crossCompanyAccess,
           hierarchyPath,
           directParent,
-          allParents,
-          directChildren: [],
-          allChildren: [],
           updatedAt: new Date()
         },
         { upsert: true, new: true }
       );
-
-      // Update parent's children if parent exists
-      if (parentUserId) {
-        await this.updateParentChildren(parentUserId, userId);
-      }
 
       return hierarchy;
     } catch (error) {
@@ -449,243 +426,90 @@ class HierarchyService {
     }
   }
 
-  // Update parent's children when a new child is added
-  static async updateParentChildren(parentUserId, childUserId) {
-    try {
-      const child = await User.findOne({ userId: childUserId });
-      const parentHierarchy = await UserHierarchy.findOne({ userId: parentUserId });
-      
-      if (!child || !parentHierarchy) return;
-
-      // Add to direct children
-      const directChildExists = parentHierarchy.directChildren.some(
-        dc => dc.userId === childUserId
-      );
-      
-      if (!directChildExists) {
-        parentHierarchy.directChildren.push({
-          userId: child.userId,
-          userType: child.userType,
-          name: child.name
-        });
-      }
-
-      // Add to all children
-      const allChildExists = parentHierarchy.allChildren.some(
-        ac => ac.userId === childUserId
-      );
-      
-      if (!allChildExists) {
-        parentHierarchy.allChildren.push({
-          userId: child.userId,
-          userType: child.userType,
-          name: child.name,
-          level: parentHierarchy.hierarchyPath.length + 1
-        });
-      }
-
-      await parentHierarchy.save();
-
-      // Update all ancestors' allChildren
-      for (const ancestor of parentHierarchy.allParents) {
-        await UserHierarchy.updateOne(
-          { userId: ancestor.userId },
-          {
-            $addToSet: {
-              allChildren: {
-                userId: child.userId,
-                userType: child.userType,
-                name: child.name,
-                level: ancestor.level + 2
-              }
-            }
-          }
-        );
-      }
-    } catch (error) {
-      throw new Error(`Error updating parent children: ${error.message}`);
-    }
+  static async isAncestor(ancestorUserId, targetUserId) {
+    const targetHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
+    if (!targetHierarchy) return false;
+    return targetHierarchy.hierarchyPath.some(p => p.userId === ancestorUserId);
   }
 
-  // Enhanced permission check with support employee logic
   static async checkUserPermission(requestingUserId, targetUserId, action = 'VIEW') {
-    try {
-      const requestingUser = await User.findOne({ userId: requestingUserId });
-      const targetUser = await User.findOne({ userId: targetUserId });
-      
-      if (!requestingUser || !targetUser) return false;
+    const requestingUser = await User.findOne({ userId: requestingUserId });
+    const targetUser = await User.findOne({ userId: targetUserId });
+    if (!requestingUser || !targetUser) return false;
 
-      // Support employees have limited permissions based on their assignment and permission set
-      if (requestingUser.userType.includes('SUPPORT_EMPLOYEE')) {
-        return await this.checkSupportEmployeePermission(requestingUserId, targetUserId, action);
-      }
-
-      // Regular hierarchy check for non-support employees
-      const requestingUserHierarchy = await UserHierarchy.findOne({ userId: requestingUserId });
-      const targetUserHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
-      
-      if (!requestingUserHierarchy || !targetUserHierarchy) return false;
-
-      // Same user
-      if (requestingUserId === targetUserId) return true;
-
-      // Check company access
-      if (requestingUser.companyId === targetUser.companyId) {
-        // Same company - check hierarchy
-        const isParent = targetUserHierarchy.hierarchyPath.some(
-          parent => parent.userId === requestingUserId
-        );
-        const isChild = requestingUserHierarchy.allChildren.some(
-          child => child.userId === targetUserId
-        );
-        return isParent || isChild;
-      }
-
-      // Cross-company access for main company users
-      if (requestingUser.userType.startsWith('MAIN_')) {
-        const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
-        return targetCompany?.companyType === 'WHITELABEL';
-      }
-
-      return false;
-    } catch (error) {
-      throw new Error(`Error checking user permission: ${error.message}`);
+    if (requestingUser.userType.includes('SUPPORT_EMPLOYEE')) {
+      return this.checkSupportEmployeePermission(requestingUserId, targetUserId, action);
     }
+
+    if (requestingUserId === targetUserId) return true;
+
+    const sameCompany = requestingUser.companyId === targetUser.companyId;
+
+    if (sameCompany) {
+      return this.isAncestor(requestingUserId, targetUserId);
+    }
+
+    // Cross-company check for MAIN
+    if (requestingUser.userType.startsWith('MAIN_')) {
+      const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
+      return targetCompany?.companyType === 'WHITELABEL';
+    }
+
+    return false;
   }
 
-  // Check support employee specific permissions
   static async checkSupportEmployeePermission(supportUserId, targetUserId, action) {
-    try {
-      const supportUser = await User.findOne({ userId: supportUserId });
-      const targetUser = await User.findOne({ userId: targetUserId });
-      
-      if (!supportUser || !targetUser) return false;
+    const supportUser = await User.findOne({ userId: supportUserId });
+    const targetUser = await User.findOne({ userId: targetUserId });
+    if (!supportUser || !targetUser) return false;
 
-      // Check if support employee has effective permissions for this action
-      const permissions = supportUser.supportPermissions.effectivePermissions;
-      if (!permissions) return false;
+    const permissions = supportUser.supportPermissions?.effectivePermissions;
+    if (!permissions) return false;
 
-      // Map actions to permissions
-      const actionPermissionMap = {
-        'VIEW': permissions.canViewUsers,
-        'CREATE': permissions.canCreateUsers,
-        'EDIT': permissions.canEditUsers,
-        'DELETE': permissions.canDeleteUsers,
-        'VIEW_CUSTOMERS': permissions.canViewCustomers,
-        'CREATE_CUSTOMERS': permissions.canCreateCustomers,
-        'EDIT_CUSTOMERS': permissions.canEditCustomers,
-        'DELETE_CUSTOMERS': permissions.canDeleteCustomers
-      };
+    const actionMap = {
+      'VIEW': permissions.canViewUsers,
+      'CREATE': permissions.canCreateUsers,
+      'EDIT': permissions.canEditUsers,
+      'DELETE': permissions.canDeleteUsers,
+      'VIEW_CUSTOMERS': permissions.canViewCustomers,
+      'CREATE_CUSTOMERS': permissions.canCreateCustomers,
+      'EDIT_CUSTOMERS': permissions.canEditCustomers,
+      'DELETE_CUSTOMERS': permissions.canDeleteCustomers
+    };
 
-      if (!actionPermissionMap[action]) return false;
+    if (!actionMap[action]) return false;
 
-      // Check assignments
-      const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
-      
-      for (const assignment of assignments) {
-        if (assignment.assignmentType === 'COMPANY' && assignment.targetCompanyId === targetUser.companyId) {
+    const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
+    for (const assignment of assignments) {
+      if (assignment.assignmentType === 'COMPANY' && assignment.targetCompanyId === targetUser.companyId) {
+        return true;
+      }
+      if (assignment.assignmentType === 'USER' && assignment.targetUserId === targetUserId) {
+        return true;
+      }
+      if (assignment.assignmentType === 'HIERARCHY') {
+        const targetHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
+        if (targetHierarchy && targetHierarchy.hierarchyPath.length <= assignment.targetHierarchyLevel) {
           return true;
         }
-        if (assignment.assignmentType === 'USER' && assignment.targetUserId === targetUserId) {
-          return true;
-        }
-        if (assignment.assignmentType === 'HIERARCHY') {
-          // Check if target user is within the assigned hierarchy level
-          const targetHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
-          if (targetHierarchy && targetHierarchy.hierarchyPath.length <= assignment.targetHierarchyLevel) {
-            return true;
-          }
-        }
       }
-
-      // Cross-company access for main company support employees
-      if (supportUser.userType === 'MAIN_SUPPORT_EMPLOYEE' && permissions.canAccessCrossCompany) {
-        const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
-        return targetCompany?.companyType === 'WHITELABEL';
-      }
-
-      return false;
-    } catch (error) {
-      return false;
     }
+
+    if (supportUser.userType === 'MAIN_SUPPORT_EMPLOYEE' && permissions.canAccessCrossCompany) {
+      const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
+      return targetCompany?.companyType === 'WHITELABEL';
+    }
+
+    return false;
   }
 
-  // Get all users that a specific user can manage (with support employee logic)
-  static async getManageableUsers(userId) {
-    try {
-      const user = await User.findOne({ userId });
-      if (!user) return [];
-
-      // Support employees have different logic
-      if (user.userType.includes('SUPPORT_EMPLOYEE')) {
-        return await this.getSupportEmployeeManageableUsers(userId);
-      }
-
-      // Regular hierarchy logic
-      const hierarchy = await UserHierarchy.findOne({ userId });
-      if (!hierarchy) return [];
-
-      const manageableUserIds = hierarchy.allChildren.map(child => child.userId);
-      manageableUserIds.push(userId); // User can manage themselves
-
-      // Add cross-company access for main company users
-      if (user.userType.startsWith('MAIN_')) {
-        const whitelabelUsers = await User.find({
-          companyId: { $in: hierarchy.crossCompanyAccess.map(access => access.companyId) }
-        });
-        manageableUserIds.push(...whitelabelUsers.map(u => u.userId));
-      }
-
-      return await User.find({ userId: { $in: manageableUserIds } });
-    } catch (error) {
-      throw new Error(`Error getting manageable users: ${error.message}`);
-    }
-  }
-
-  // Get users manageable by support employee
-  static async getSupportEmployeeManageableUsers(supportUserId) {
-    try {
-      const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
-      let manageableUserIds = [supportUserId]; // Support employee can manage themselves
-
-      for (const assignment of assignments) {
-        if (assignment.assignmentType === 'COMPANY') {
-          const companyUsers = await User.find({ companyId: assignment.targetCompanyId });
-          manageableUserIds.push(...companyUsers.map(u => u.userId));
-        } else if (assignment.assignmentType === 'USER') {
-          manageableUserIds.push(assignment.targetUserId);
-        } else if (assignment.assignmentType === 'HIERARCHY') {
-          // Get users within the assigned hierarchy level
-          const hierarchyUsers = await UserHierarchy.find({
-            'hierarchyPath.level': { $lte: assignment.targetHierarchyLevel }
-          });
-          manageableUserIds.push(...hierarchyUsers.map(h => h.userId));
-        }
-      }
-
-      return await User.find({ userId: { $in: [...new Set(manageableUserIds)] } });
-    } catch (error) {
-      throw new Error(`Error getting support employee manageable users: ${error.message}`);
-    }
-  }
-
-  // Get all users in a user's hierarchy (both up and down)
-  static async getUserHierarchy(userId) {
-    try {
-      const hierarchy = await UserHierarchy.findOne({ userId });
-      if (!hierarchy) return null;
-
-      return {
-        user: userId,
-        parents: hierarchy.allParents,
-        children: hierarchy.allChildren,
-        directChildren: hierarchy.directChildren,
-        hierarchyPath: hierarchy.hierarchyPath,
-        crossCompanyAccess: hierarchy.crossCompanyAccess || []
-      };
-    } catch (error) {
-      throw new Error(`Error getting user hierarchy: ${error.message}`);
-    }
+  static async getManageableUsers(managerUserId) {
+    const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId });
+    console.log('hierarchies      ', hierarchies);
+    
+    const userIds = hierarchies.map(h => h.userId);
+    const users = await User.find({ userId: { $in: userIds } });
+    return users;
   }
 }
 
@@ -950,7 +774,11 @@ class CustomerService {
       const warrantyKey = await KeyManagementService.useKey(retailerId, companyId);
 
       // Get retailer's hierarchy
-      const retailerHierarchy = await HierarchyService.getUserHierarchy(retailerId);
+      const retailerHierarchy = await UserHierarchy.findOne({ userId: retailerId });
+      if (!retailerHierarchy) throw new Error('Retailer hierarchy not found');
+
+      let hierarchyPath = [];
+      hierarchyPath = [...retailerHierarchy.hierarchyPath];
 
       // Create customer
       const customer = new Customer({
@@ -973,7 +801,7 @@ class CustomerService {
             name: retailer.name,
             userType: retailer.userType
           },
-          distributorChain: retailerHierarchy ? retailerHierarchy.parents : []
+          distributorChain: hierarchyPath
         }
       });
 
@@ -1002,50 +830,56 @@ class CustomerService {
   }
 
   // Get customers accessible to a user based on hierarchy and permissions
-  static async getAccessibleCustomers(userId, companyId, filters = {}) {
+  static async getAccessibleCustomers(userId, companyId, userType, filters = {}) {
     try {
       const user = await User.findOne({ userId });
       if (!user) return [];
+      let customers = []
 
-      let accessibleUserIds = [];
+      if(userType == "RETAILER"){
+        customers = await Customer.find({retailerId: userId, companyId})
+      }else{
+          let accessibleUserIds = [];
 
-      // Support employees have different access logic
-      if (user.userType.includes('SUPPORT_EMPLOYEE')) {
-        if (!user.supportPermissions.effectivePermissions.canViewCustomers) {
-          return [];
+        // Support employees have different access logic
+        if (user.userType.includes('SUPPORT_EMPLOYEE')) {
+          if (!user.supportPermissions.effectivePermissions.canViewCustomers) {
+            return [];
+          }
+          
+          const manageableUsers = await HierarchyService.getSupportEmployeeManageableUsers(userId);
+          accessibleUserIds = manageableUsers.map(u => u.userId);
+        } else {
+          // Regular hierarchy access
+          let hierarchy = null;
+          hierarchy = await HierarchyService.getManageableUsers(userId);
+          if (!hierarchy) return [];
+
+          // accessibleUserIds = hierarchy.children.map(child => child.userId);
+          // accessibleUserIds.push(userId);
+
+          // Add cross-company access for main company users
+          if (user.userType.startsWith('MAIN_')) {
+            const whitelabelUsers = await User.find({
+              companyId: { $in: hierarchy.crossCompanyAccess.map(access => access.companyId) }
+            });
+            hierarchy.push(...whitelabelUsers.map(u => u.userId));
+          }
         }
-        
-        const manageableUsers = await HierarchyService.getSupportEmployeeManageableUsers(userId);
-        accessibleUserIds = manageableUsers.map(u => u.userId);
-      } else {
-        // Regular hierarchy access
-        const hierarchy = await HierarchyService.getUserHierarchy(userId);
-        if (!hierarchy) return [];
 
-        accessibleUserIds = hierarchy.children.map(child => child.userId);
-        accessibleUserIds.push(userId);
+        // Build query
+        const query = {
+          retailerId: { $in: hierarchy },
+          ...filters
+        };
 
-        // Add cross-company access for main company users
-        if (user.userType.startsWith('MAIN_')) {
-          const whitelabelUsers = await User.find({
-            companyId: { $in: hierarchy.crossCompanyAccess.map(access => access.companyId) }
-          });
-          accessibleUserIds.push(...whitelabelUsers.map(u => u.userId));
+        // Add company filter for non-main company users
+        if (!user.userType.startsWith('MAIN_') || user.userType.includes('SUPPORT_EMPLOYEE')) {
+          query.companyId = companyId;
         }
+
+        customers = await Customer.find(query).sort({ 'dates.createdDate': -1 });
       }
-
-      // Build query
-      const query = {
-        retailerId: { $in: accessibleUserIds },
-        ...filters
-      };
-
-      // Add company filter for non-main company users
-      if (!user.userType.startsWith('MAIN_') || user.userType.includes('SUPPORT_EMPLOYEE')) {
-        query.companyId = companyId;
-      }
-
-      const customers = await Customer.find(query).sort({ 'dates.createdDate': -1 });
       return customers;
     } catch (error) {
       throw new Error(`Error getting accessible customers: ${error.message}`);
@@ -1129,9 +963,9 @@ class CustomerService {
   }
 
   // Get customer statistics (with support employee access control)
-  static async getCustomerStats(userId, companyId) {
+  static async getCustomerStats(userId, companyId, userType) {
     try {
-      const accessibleCustomers = await this.getAccessibleCustomers(userId, companyId);
+      const accessibleCustomers = await this.getAccessibleCustomers(userId, companyId, userType);
       
       const stats = {
         totalCustomers: accessibleCustomers.length,
