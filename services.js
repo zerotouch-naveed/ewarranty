@@ -839,6 +839,7 @@ class CustomerService {
       if(userType == "RETAILER"){
         customers = await Customer.find({retailerId: userId, companyId})
       }else{
+          let hierarchy = null;
           let accessibleUserIds = [];
 
         // Support employees have different access logic
@@ -851,25 +852,24 @@ class CustomerService {
           accessibleUserIds = manageableUsers.map(u => u.userId);
         } else {
           // Regular hierarchy access
-          let hierarchy = null;
           hierarchy = await HierarchyService.getManageableUsers(userId);
           if (!hierarchy) return [];
 
-          // accessibleUserIds = hierarchy.children.map(child => child.userId);
-          // accessibleUserIds.push(userId);
+          accessibleUserIds = hierarchy.map(child => child.userId);
+          accessibleUserIds.push(userId);
 
           // Add cross-company access for main company users
           if (user.userType.startsWith('MAIN_')) {
             const whitelabelUsers = await User.find({
               companyId: { $in: hierarchy.crossCompanyAccess.map(access => access.companyId) }
             });
-            hierarchy.push(...whitelabelUsers.map(u => u.userId));
+            accessibleUserIds.push(...whitelabelUsers.map(u => u.userId));
           }
         }
 
         // Build query
         const query = {
-          retailerId: { $in: hierarchy },
+          retailerId: { $in: accessibleUserIds },
           ...filters
         };
 
@@ -877,7 +877,6 @@ class CustomerService {
         if (!user.userType.startsWith('MAIN_') || user.userType.includes('SUPPORT_EMPLOYEE')) {
           query.companyId = companyId;
         }
-
         customers = await Customer.find(query).sort({ 'dates.createdDate': -1 });
       }
       return customers;
