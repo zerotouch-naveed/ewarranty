@@ -378,7 +378,7 @@ const requireSuperAdmin = async (request, reply) => {
 
 const requireAdmin = async (request, reply) => {
   // Only owners can perform admin actions (e.g., add companies)
-  if (!request.user || !request.user.isOwner || !request.user.userType.includes('Main_OWNER')) {
+  if (!request.user || !request.user.isOwner || !request.user.userType.includes('MAIN_OWNER')) {
     return reply.code(403).send({ 
       success: false,
       error: 'Access denied. Owner privileges required.' 

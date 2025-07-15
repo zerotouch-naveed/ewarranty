@@ -206,7 +206,7 @@
      const { companyId } = request.params;
  
      // Users can only access their own company details
-     if (request.user.companyId !== companyId && !['TSM', 'ASM'].includes(request.user.userType)) {
+     if (request.user.companyId !== companyId && !['WHITELABEL_OWNER', 'MAIN_OWNER'].includes(request.user.userType)) {
        return reply.code(403).send({
          success: false,
          error: 'Access denied'
