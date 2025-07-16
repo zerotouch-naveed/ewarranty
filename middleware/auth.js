@@ -41,7 +41,7 @@ const authenticate = async (request, reply) => {
       let company = null;
       const userCompany = await Company.findOne({ companyId: user.companyId });
       if(userCompany){
-        if (request.user.userType === 'MAIN_OWNER' || request.user.userType === 'WHITELABEL_OWNER'){
+        if (user.userType === 'MAIN_OWNER' || user.userType === 'WHITELABEL_OWNER'){
           company = userCompany;
         } else {
           company = {
@@ -54,6 +54,9 @@ const authenticate = async (request, reply) => {
           companyId: user.companyId
         }
       }
+
+      console.log('company    ',company);
+      
       
       request.user = {
         ...user.toObject(),
