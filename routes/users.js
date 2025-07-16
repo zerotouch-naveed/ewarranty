@@ -7,7 +7,7 @@ const bcrypt = require('bcrypt');
 async function userRoutes(fastify, options) {
 
   // ✅ Get all users the current user can manage (based on upward hierarchy)
-  fastify.get('/', {
+  fastify.get('/all', {
     preHandler: [authenticate],
     schema: {
       description: 'Get users based on hierarchy',
@@ -30,17 +30,24 @@ async function userRoutes(fastify, options) {
   }));
 
   // ✅ Get user details with permission check
-  fastify.get('/:userId', {
+  fastify.post('/get', {
     preHandler: [authenticate],
     schema: {
       description: 'Get user details',
       tags: ['Users'],
-      security: [{ Bearer: [] }]
+      security: [{ Bearer: [] }],
+      body: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' }
+        }
+      }
     }
   }, catchAsync(async (request, reply) => {
     const hasPermission = await HierarchyService.checkUserPermission(
       request.user.userId,
-      request.params.userId
+      request.body.userId
     );
 
     if (!hasPermission) {
@@ -50,7 +57,7 @@ async function userRoutes(fastify, options) {
       });
     }
 
-    const user = await User.findOne({ userId: request.params.userId }).select('-password');
+    const user = await User.findOne({ userId: request.body.userId }).select('-password');
     if (!user) {
       return reply.code(404).send({
         success: false,
@@ -65,17 +72,24 @@ async function userRoutes(fastify, options) {
   }));
 
   // ✅ Get hierarchy info of a user (only shows upward path)
-  fastify.get('/:userId/hierarchy', {
+  fastify.post('/hierarchy', {
     preHandler: [authenticate],
     schema: {
       description: 'Get user hierarchy path',
       tags: ['Users'],
-      security: [{ Bearer: [] }]
+      security: [{ Bearer: [] }],
+      body: {
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' }
+        }
+      }
     }
   }, catchAsync(async (request, reply) => {
     const hasPermission = await HierarchyService.checkUserPermission(
       request.user.userId,
-      request.params.userId
+      request.body.userId
     );
 
     if (!hasPermission) {
@@ -85,7 +99,7 @@ async function userRoutes(fastify, options) {
       });
     }
 
-    const hierarchy = await UserHierarchy.findOne({ userId: request.params.userId });
+    const hierarchy = await UserHierarchy.findOne({ userId: request.body.userId });
     if (!hierarchy) {
       return reply.code(404).send({
         success: false,
@@ -100,7 +114,7 @@ async function userRoutes(fastify, options) {
   }));
 
   // ✅ Update user info with permission check
-  fastify.put('/:userId', {
+  fastify.post('/update', {
     preHandler: [authenticate],
     schema: {
       description: 'Update user details',
@@ -108,9 +122,10 @@ async function userRoutes(fastify, options) {
       security: [{ Bearer: [] }]
     }
   }, catchAsync(async (request, reply) => {
+    const { userId, ...updateData } = request.body;
     const hasPermission = await HierarchyService.checkUserPermission(
       request.user.userId,
-      request.params.userId
+      userId
     );
 
     if (!hasPermission) {
@@ -120,13 +135,13 @@ async function userRoutes(fastify, options) {
       });
     }
 
-    const updateData = { ...request.body };
+    
     if (updateData.password) {
       updateData.password = await bcrypt.hash(updateData.password, 12);
     }
 
     const user = await User.findOneAndUpdate(
-      { userId: request.params.userId },
+      { userId },
       updateData,
       { new: true }
     ).select('-password');

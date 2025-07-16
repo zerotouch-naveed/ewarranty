@@ -382,7 +382,7 @@ async function authRoutes(fastify, options) {
   );
 
   // Change password
-  fastify.put(
+  fastify.post(
     "/change-password",
     {
       preHandler: [authenticate, validate(userValidation.changePassword)],
@@ -483,7 +483,7 @@ async function authRoutes(fastify, options) {
   );
 
   // Update user profile
-  fastify.put(
+  fastify.post(
     "/me",
     {
       preHandler: [authenticate, validate(userValidation.update)],

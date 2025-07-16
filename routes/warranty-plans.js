@@ -5,7 +5,7 @@ const { catchAsync } = require('../middleware/errorHandler');
 async function warrantyPlanRoutes(fastify, options) {
   
   // Get Warranty Plans
-  fastify.get('/', {
+  fastify.get('/all', {
     preHandler: [authenticate],
     schema: {
       description: 'Get warranty plans',
@@ -25,7 +25,7 @@ async function warrantyPlanRoutes(fastify, options) {
   }));
 
   // Create Warranty Plan
-  fastify.post('/', {
+  fastify.post('/create', {
     preHandler: [authenticate],
     schema: {
       description: 'Create warranty plan',

@@ -5,7 +5,7 @@ const { catchAsync } = require('../middleware/errorHandler');
 async function claimRoutes(fastify, options) {
   
   // Get Claims
-  fastify.get('/', {
+  fastify.get('/all', {
     preHandler: [authenticate],
     schema: {
       description: 'Get claims',
@@ -24,7 +24,7 @@ async function claimRoutes(fastify, options) {
   }));
 
   // Create Claim
-  fastify.post('/', {
+  fastify.post('/create', {
     preHandler: [authenticate],
     schema: {
       description: 'Create new claim',

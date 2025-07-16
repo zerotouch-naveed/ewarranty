@@ -6,7 +6,7 @@
  async function customerRoutes(fastify, options) {
    
    // Create Customer (Retailers only)
-   fastify.post('/', {
+   fastify.post('/create', {
   preHandler: [authenticate, requireRetailer],
   schema: {
     description: 'Create a new customer warranty',
@@ -111,7 +111,7 @@
    }));
  
    // Get Customers (based on hierarchy)
-   fastify.get('/', {
+   fastify.get('/all', {
      preHandler: [authenticate],
      schema: {
        description: 'Get customers based on hierarchy',
@@ -144,17 +144,24 @@
    }));
  
    // Get Customer Details
-   fastify.get('/:customerId', {
+   fastify.post('/get', {
      preHandler: [authenticate],
      schema: {
        description: 'Get customer details',
        tags: ['Customers'],
-       security: [{ Bearer: [] }]
+       security: [{ Bearer: [] }],
+       body: {
+        type: 'object',
+        required: ['customerId'],
+        properties: {
+          customerId: { type: 'string' }
+        }
+      }
      }
    }, catchAsync(async (request, reply) => {
      const canAccess = await CustomerService.canAccessCustomer(
        request.user.userId,
-       request.params.customerId
+       request.body.customerId
      );
  
      if (!canAccess) {
@@ -164,7 +171,7 @@
        });
      }
  
-     const customer = await Customer.findOne({ customerId: request.params.customerId });
+     const customer = await Customer.findOne({ customerId: request.body.customerId });
      if (!customer) {
        return reply.code(404).send({ 
          success: false,

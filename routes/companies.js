@@ -6,7 +6,7 @@
  async function companyRoutes(fastify, options) {
    
    // Create Company (Admin only)
-   fastify.post('/', {
+   fastify.post('/create', {
      preHandler: [authenticate, requireAdmin],
      schema: {
        description: 'Create a new white-label company (and owner)',
@@ -195,15 +195,22 @@
    
  
    // Get Company Details
-   fastify.get('/:companyId', {
+   fastify.post('/get', {
      preHandler: [authenticate],
      schema: {
        description: 'Get company details',
        tags: ['Companies'],
-       security: [{ Bearer: [] }]
+       security: [{ Bearer: [] }],
+       body: {
+         type: 'object',
+         required: ['companyId'],
+         properties: {
+           companyId: { type: 'string' },
+         }
+        }
      }
    }, catchAsync(async (request, reply) => {
-     const { companyId } = request.params;
+     const { companyId } = request.body;
  
      // Users can only access their own company details
      if (request.user.companyId !== companyId && !['WHITELABEL_OWNER', 'MAIN_OWNER'].includes(request.user.userType)) {
@@ -228,16 +235,22 @@
    }));
  
    // Update Company
-   fastify.put('/:companyId', {
+   fastify.post('/update', {
      preHandler: [authenticate, requireAdmin, validate(companyValidation.update)],
      schema: {
        description: 'Update company details',
        tags: ['Companies'],
-       security: [{ Bearer: [] }]
+       security: [{ Bearer: [] }],
+       body: {
+         type: 'object',
+         required: ['companyId'],
+         properties: {
+           companyId: { type: 'string' },
+         }
+        }
      }
    }, catchAsync(async (request, reply) => {
-     const { companyId } = request.params;
-     const updateData = request.body;
+     const { companyId, ...updateData } = request.body;
  
      // Get old data for audit
      const oldCompany = await Company.findOne({ companyId });
@@ -275,7 +288,7 @@
    }));
  
    // Get All Companies (Super Admin only)
-   fastify.get('/', {
+   fastify.get('/all', {
      preHandler: [authenticate, requireAdmin],
      schema: {
        description: 'Get all companies',
@@ -319,15 +332,22 @@
    }));
  
    // Deactivate Company
-   fastify.delete('/:companyId', {
+   fastify.post('/delete', {
      preHandler: [authenticate, requireAdmin],
      schema: {
        description: 'Deactivate company',
        tags: ['Companies'],
-       security: [{ Bearer: [] }]
+       security: [{ Bearer: [] }],
+       body: {
+         type: 'object',
+         required: ['companyId'],
+         properties: {
+           companyId: { type: 'string' },
+         }
+        }
      }
    }, catchAsync(async (request, reply) => {
-     const { companyId } = request.params;
+     const { companyId } = request.body;
  
      const company = await Company.findOneAndUpdate(
        { companyId },
