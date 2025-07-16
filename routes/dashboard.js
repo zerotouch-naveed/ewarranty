@@ -17,15 +17,15 @@ async function dashboardRoutes(fastify, options) {
     catchAsync(async (request, reply) => {
       const { companyId, userId, userType } = request.user;
 
-      // Get manageable users (return empty array if none)
+      const user = await User.findOne({ userId }).select("keyAllocation");
+      const keyAllocation = user?.keyAllocation;
+
       const users = (await HierarchyService.getManageableUsers(userId)) || [];
 
-      // Sort users by createdAt descending
       const sortedUsers = users.sort(
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
 
-      // Get the last 5 added users
       const lastAddedUsers = sortedUsers.slice(0, 5);
 
       // Count users by userType
@@ -42,7 +42,6 @@ async function dashboardRoutes(fastify, options) {
         })
       );
 
-      // Get accessible customers
       const customers =
         (await CustomerService.getAccessibleCustomers(
           userId,
@@ -51,11 +50,11 @@ async function dashboardRoutes(fastify, options) {
           {}
         )) || [];
 
-      // Respond with stats
       return reply.send({
         success: true,
         userTypeCount,
         lastAddedUsers,
+        keyAllocation,
         totalCustomersCount: customers.length,
       });
     })
