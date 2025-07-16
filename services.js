@@ -537,7 +537,32 @@ class KeyManagementService {
       if (!hasPermission) {
         throw new Error('No permission to allocate keys to this user');
       }
+      const targetUser = await User.findOne({ userId: toUserId });
 
+      if (fromUser.userType.startsWith('MAIN_') || fromUser?.userType.startsWith('WHITELABEL_OWNER')){
+        await Company.updateOne(
+          {companyId: fromUser.companyId},
+          {
+            $inc: {
+              'keyAllocation.usedKeys': keyCount,
+              'keyAllocation.remainingKeys': -keyCount
+            }
+          }
+        );
+      }
+
+
+      if (targetUser?.userType.startsWith('WHITELABEL_OWNER')){
+        await Company.updateOne(
+          {companyId: target.companyId},
+          {
+            $inc: {
+              'keyAllocation.usedKeys': keyCount,
+              'keyAllocation.remainingKeys': -keyCount
+            }
+          }
+        );
+      }
       // Update key counts
       await User.updateOne(
         { userId: fromUserId },

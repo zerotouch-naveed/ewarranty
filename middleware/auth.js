@@ -38,7 +38,23 @@ const authenticate = async (request, reply) => {
       }
 
       // Add user to request object with additional company context
-      const company = await Company.findOne({ companyId: user.companyId });
+      let company = null;
+      const userCompany = await Company.findOne({ companyId: user.companyId });
+      if(userCompany){
+        if (request.user.userType === 'MAIN_OWNER' || request.user.userType === 'WHITELABEL_OWNER'){
+          company = userCompany;
+        } else {
+          company = {
+            companyId: userCompany.companyId,
+            companyName: userCompany.companyName,
+          }
+        }
+      }else{
+        company = {
+          companyId: user.companyId
+        }
+      }
+      
       request.user = {
         ...user.toObject(),
         company: company || null,

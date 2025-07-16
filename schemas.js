@@ -72,7 +72,7 @@ const companySchema = new Schema({
     },
     currency: {
       type: String,
-      default: 'USD'
+      default: 'INR'
     },
     customFields: [{
       fieldName: String,
