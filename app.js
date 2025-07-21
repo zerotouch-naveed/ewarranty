@@ -43,10 +43,10 @@ const start = async () => {
     });
 
     await fastify.register(require('@fastify/cors'), {
-      origin: true,
+      origin: true, // You can also restrict to ngrok URL here
       credentials: true,
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization']
+      allowedHeaders: ['Content-Type', 'Authorization'],
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
     });
 
     // Only add rate limiting in non-serverless environments
@@ -79,34 +79,21 @@ const start = async () => {
     // Swagger documentation
       await fastify.register(require('@fastify/swagger'), {
         swagger: {
-          info: {
-            title: 'Extended Warranty Management API',
-            description: 'API for managing extended warranties with hierarchical user structure',
-            version: '1.0.0'
-          },
-          host: process.env.SWAGGER_HOST || 'localhost:3000',
-          schemes: process.env.NODE_ENV === 'production' ? ['https'] : ['http', 'https'],
+          info: { title: 'API', version: '1.0.0' },
+          host: 'https://ewarranty-oefb.vercel.app/',
+          schemes: ['https'],
           consumes: ['application/json'],
-          produces: ['application/json'],
-          securityDefinitions: {
-            Bearer: {
-              type: 'apiKey',
-              name: 'Authorization',
-              in: 'header',
-              description: 'Enter Bearer [token]'
-            }
-          }
+          produces: ['application/json']
         }
       });
 
       await fastify.register(require('@fastify/swagger-ui'), {
         routePrefix: '/docs',
         uiConfig: {
+          url: 'https://ewarranty-oefb.vercel.app/docs/json', // adjust if needed
           docExpansion: 'list',
-          deepLinking: false,
-          url: 'https://ewarranty-oefb.vercel.app/docs'
+          deepLinking: false
         },
-        staticCSP: true,
       });
     // Register error handler
     fastify.setErrorHandler(errorHandler);
