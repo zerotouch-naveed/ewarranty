@@ -42,48 +42,11 @@ const start = async () => {
       contentSecurityPolicy: false
     });
 
-    // Enhanced CORS configuration for Vercel
     await fastify.register(require('@fastify/cors'), {
-      origin: (origin, callback) => {
-        // In development, allow all origins
-        if (process.env.NODE_ENV === 'development') {
-          callback(null, true);
-          return;
-        }
-        
-        // For production, specify allowed origins
-        const allowedOrigins = [
-          'https://ewarranty-oefb.vercel.app/',
-          'http://localhost:3000',
-          // Add your frontend domains here
-        ];
-        
-        // Allow requests with no origin (mobile apps, postman, etc.)
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
-        
-        // Check if origin is allowed
-        if (allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          // For now, allow all origins (restrict this in production)
-          callback(null, true);
-        }
-      },
+      origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-      allowedHeaders: [
-        'Content-Type', 
-        'Authorization', 
-        'X-Requested-With',
-        'Accept',
-        'Origin'
-      ],
-      exposedHeaders: ['X-Total-Count', 'X-Page-Count'],
-      preflightContinue: false,
-      optionsSuccessStatus: 204
+      allowedHeaders: ['Content-Type', 'Authorization']
     });
 
     // Only add rate limiting in non-serverless environments
