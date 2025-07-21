@@ -74,7 +74,9 @@ const start = async () => {
         prefix: '/uploads/'
       });
 
-      // Swagger documentation
+      
+    }
+    // Swagger documentation
       await fastify.register(require('@fastify/swagger'), {
         swagger: {
           info: {
@@ -105,8 +107,6 @@ const start = async () => {
         },
         staticCSP: true
       });
-    }
-
     // Register error handler
     fastify.setErrorHandler(errorHandler);
 
