@@ -78,30 +78,40 @@ const start = async () => {
     }
     // Swagger documentation
       await fastify.register(require('@fastify/swagger'), {
-        swagger: {
-          info: { title: 'API', version: '1.0.0' },
-          host: 'https://ewarranty-oefb.vercel.app/',
-          schemes: ['https'],
-          consumes: ['application/json'],
-          produces: ['application/json']
+      swagger: {
+        info: { 
+          title: 'E-Warranty API', 
+          version: '1.0.0',
+          description: 'API for E-Warranty Management System'
+        },
+        host: process.env.VERCEL || process.env.LAMBDA_TASK_ROOT 
+          ? 'ewarranty-oefb.vercel.app' 
+          : `localhost:${process.env.PORT || 3000}`,
+        schemes: process.env.VERCEL || process.env.LAMBDA_TASK_ROOT ? ['https'] : ['http'],
+        consumes: ['application/json'],
+        produces: ['application/json'],
+        securityDefinitions: {
+          Bearer: {
+            type: 'apiKey',
+            name: 'Authorization',
+            in: 'header',
+            description: 'Enter: Bearer {token}'
+          }
         }
-      });
+      }
+    });
 
-      await fastify.register(require('@fastify/swagger-ui'), {
-        routePrefix: '/docs',
-        uiConfig: {
-          docExpansion: 'full',
-          deepLinking: false
-        },
-        staticCSP: true,
-        transformStaticCSP: (header) => header,
-        uiHooks: {
-          onRequest: async (request, reply) => {},
-          preHandler: async (request, reply) => {}
-        },
-        // 👇 Force it to use the correct public URL of your spec
-        url: 'https://ewarranty-oefb.vercel.app/docs/json'
-      });
+    await fastify.register(require('@fastify/swagger-ui'), {
+      routePrefix: '/docs',
+      uiConfig: {
+        docExpansion: 'list',
+        deepLinking: false
+      },
+      staticCSP: true,
+      transformStaticCSP: (header) => header,
+      // Remove the hardcoded URL - let Swagger UI auto-discover
+      exposeRoute: true
+    });
     // Register error handler
     fastify.setErrorHandler(errorHandler);
 
