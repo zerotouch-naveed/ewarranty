@@ -32,7 +32,6 @@ const dashboardRoutes = require('./routes/dashboard');
 // Global error handler
 const { errorHandler } = require('./middleware/errorHandler');
 
-// Start server
 const start = async () => {
   try {
     // Connect to database
@@ -44,62 +43,69 @@ const start = async () => {
     });
 
     await fastify.register(require('@fastify/cors'), {
-      origin: true // Allow all origins for development
+      origin: true,
+      credentials: true,
+      methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+      allowedHeaders: ['Content-Type', 'Authorization']
     });
 
-    await fastify.register(require('@fastify/rate-limit'), {
-      max: 100,
-      timeWindow: '1 minute'
-    });
+    // Only add rate limiting in non-serverless environments
+    if (!process.env.VERCEL) {
+      await fastify.register(require('@fastify/rate-limit'), {
+        max: 100,
+        timeWindow: '1 minute'
+      });
 
-    await fastify.register(require('@fastify/multipart'), {
-      limits: {
-        fileSize: 10 * 1024 * 1024 // 10MB
+      await fastify.register(require('@fastify/multipart'), {
+        limits: {
+          fileSize: 10 * 1024 * 1024 // 10MB
+        }
+      });
+
+      // Ensure uploads directory exists
+      const uploadsDir = path.join(__dirname, 'uploads');
+      const fs = require('fs');
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
       }
-    });
 
-    // Ensure uploads directory exists
-    const uploadsDir = path.join(__dirname, 'uploads');
-    const fs = require('fs');
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
+      await fastify.register(require('@fastify/static'), {
+        root: uploadsDir,
+        prefix: '/uploads/'
+      });
 
-    await fastify.register(require('@fastify/static'), {
-      root: uploadsDir,
-      prefix: '/uploads/'
-    });
-
-    // Swagger documentation
-    await fastify.register(require('@fastify/swagger'), {
-      swagger: {
-        info: {
-          title: 'Extended Warranty Management API',
-          description: 'API for managing extended warranties with hierarchical user structure',
-          version: '1.0.0'
-        },
-        host: 'localhost:3000',
-        schemes: ['http', 'https'],
-        consumes: ['application/json'],
-        produces: ['application/json'],
-        securityDefinitions: {
-          Bearer: {
-            type: 'apiKey',
-            name: 'Authorization',
-            in: 'header',
-            description: 'Enter Bearer [token]'
+      // Swagger documentation
+      await fastify.register(require('@fastify/swagger'), {
+        swagger: {
+          info: {
+            title: 'Extended Warranty Management API',
+            description: 'API for managing extended warranties with hierarchical user structure',
+            version: '1.0.0'
+          },
+          host: process.env.SWAGGER_HOST || 'localhost:3000',
+          schemes: process.env.NODE_ENV === 'production' ? ['https'] : ['http', 'https'],
+          consumes: ['application/json'],
+          produces: ['application/json'],
+          securityDefinitions: {
+            Bearer: {
+              type: 'apiKey',
+              name: 'Authorization',
+              in: 'header',
+              description: 'Enter Bearer [token]'
+            }
           }
         }
-      }
-    });
+      });
 
-    await fastify.register(require('@fastify/swagger-ui'), {
-      routePrefix: '/docs',
-      uiConfig: {
-        docExpansion: 'list',
-        deepLinking: false
-      }
-    });
+      await fastify.register(require('@fastify/swagger-ui'), {
+        routePrefix: '/docs',
+        uiConfig: {
+          docExpansion: 'list',
+          deepLinking: false
+        },
+        staticCSP: true
+      });
+    }
 
     // Register error handler
     fastify.setErrorHandler(errorHandler);
@@ -117,14 +123,16 @@ const start = async () => {
         database: dbStatus,
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development',
-        version: '1.0.0'
+        version: '1.0.0',
+        platform: process.env.VERCEL ? 'vercel' : 'local'
       };
 
-      // If database is not connected, add helpful information
       if (dbState !== 1) {
         health.message = 'API is running but database is not connected';
-        health.documentation = 'http://localhost:3000/docs';
-        health.setup_guide = 'Check QUICK_START.md for MongoDB installation';
+        if (!process.env.VERCEL) {
+          health.documentation = `${request.protocol}://${request.hostname}:${process.env.PORT || 3000}/docs`;
+          health.setup_guide = 'Check QUICK_START.md for MongoDB installation';
+        }
       }
       
       return health;
@@ -140,7 +148,12 @@ const start = async () => {
     await fastify.register(claimRoutes, { prefix: '/api/claims' });
     await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 
-    // Start the server
+    // For Vercel serverless deployment
+    if (process.env.VERCEL) {
+      return fastify;
+    }
+
+    // For local development - start the server
     const PORT = process.env.PORT || 3000;
     const HOST = process.env.HOST || '0.0.0.0';
 
@@ -150,39 +163,68 @@ const start = async () => {
 🚀 Server is running on http://${HOST}:${PORT}
 📚 API Documentation: http://${HOST}:${PORT}/docs
 🏥 Health Check: http://${HOST}:${PORT}/health
+🌐 CORS: Enabled for all origins
     `);
 
   } catch (error) {
     fastify.log.error(error);
-    process.exit(1);
+    if (!process.env.VERCEL) {
+      process.exit(1);
+    }
+    throw error;
   }
 };
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Promise Rejection:', err);
-  process.exit(1);
+  if (!process.env.VERCEL) {
+    process.exit(1);
+  }
 });
 
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  process.exit(1);
+  if (!process.env.VERCEL) {
+    process.exit(1);
+  }
 });
 
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  await fastify.close();
-  await mongoose.connection.close();
-  process.exit(0);
-});
+// Graceful shutdown (only for local development)
+if (!process.env.VERCEL) {
+  process.on('SIGTERM', async () => {
+    console.log('SIGTERM received, shutting down gracefully');
+    await fastify.close();
+    await mongoose.connection.close();
+    process.exit(0);
+  });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT received, shutting down gracefully');
-  await fastify.close();
-  await mongoose.connection.close();
-  process.exit(0);
-});
+  process.on('SIGINT', async () => {
+    console.log('SIGINT received, shutting down gracefully');
+    await fastify.close();
+    await mongoose.connection.close();
+    process.exit(0);
+  });
+}
 
-start();
+// Export for Vercel serverless or start for local
+if (process.env.VERCEL) {
+  module.exports = async (req, res) => {
+    try {
+      const app = await start();
+      await app.ready();
+      app.server.emit('request', req, res);
+    } catch (error) {
+      console.error('Serverless error:', error);
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({
+        error: 'Internal Server Error',
+        message: 'Failed to initialize application'
+      }));
+    }
+  };
+} else {
+  start();
+}
