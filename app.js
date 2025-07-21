@@ -103,9 +103,10 @@ const start = async () => {
         routePrefix: '/docs',
         uiConfig: {
           docExpansion: 'list',
-          deepLinking: false
+          deepLinking: false,
+          url: 'https://ewarranty-oefb.vercel.app/docs'
         },
-        staticCSP: true
+        staticCSP: true,
       });
     // Register error handler
     fastify.setErrorHandler(errorHandler);
