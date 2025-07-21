@@ -50,7 +50,7 @@ const start = async () => {
     });
 
     // Only add rate limiting in non-serverless environments
-    if (!process.env.VERCEL) {
+    if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT) {
       await fastify.register(require('@fastify/rate-limit'), {
         max: 100,
         timeWindow: '1 minute'
@@ -124,12 +124,12 @@ const start = async () => {
         uptime: process.uptime(),
         environment: process.env.NODE_ENV || 'development',
         version: '1.0.0',
-        platform: process.env.VERCEL ? 'vercel' : 'local'
+        platform: (process.env.VERCEL || process.env.LAMBDA_TASK_ROOT) ? 'vercel' : 'local'
       };
 
       if (dbState !== 1) {
         health.message = 'API is running but database is not connected';
-        if (!process.env.VERCEL) {
+        if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT) {
           health.documentation = `${request.protocol}://${request.hostname}:${process.env.PORT || 3000}/docs`;
           health.setup_guide = 'Check QUICK_START.md for MongoDB installation';
         }
@@ -149,7 +149,7 @@ const start = async () => {
     await fastify.register(dashboardRoutes, { prefix: '/api/dashboard' });
 
     // For Vercel serverless deployment
-    if (process.env.VERCEL) {
+    if (process.env.VERCEL || process.env.LAMBDA_TASK_ROOT) {
       return fastify;
     }
 
@@ -166,19 +166,22 @@ const start = async () => {
 🌐 CORS: Enabled for all origins
     `);
 
+    return fastify;
+
   } catch (error) {
     fastify.log.error(error);
-    if (!process.env.VERCEL) {
+    if (process.env.VERCEL || process.env.LAMBDA_TASK_ROOT) {
+      throw error; // Let the serverless handler catch this
+    } else {
       process.exit(1);
     }
-    throw error;
   }
 };
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled Promise Rejection:', err);
-  if (!process.env.VERCEL) {
+  if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT) {
     process.exit(1);
   }
 });
@@ -186,13 +189,13 @@ process.on('unhandledRejection', (err) => {
 // Handle uncaught exceptions
 process.on('uncaughtException', (err) => {
   console.error('Uncaught Exception:', err);
-  if (!process.env.VERCEL) {
+  if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT) {
     process.exit(1);
   }
 });
 
 // Graceful shutdown (only for local development)
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT) {
   process.on('SIGTERM', async () => {
     console.log('SIGTERM received, shutting down gracefully');
     await fastify.close();
@@ -208,23 +211,41 @@ if (!process.env.VERCEL) {
   });
 }
 
-// Export for Vercel serverless or start for local
-if (process.env.VERCEL) {
-  module.exports = async (req, res) => {
-    try {
-      const app = await start();
-      await app.ready();
-      app.server.emit('request', req, res);
-    } catch (error) {
-      console.error('Serverless error:', error);
+let app;
+
+// Initialize app once for serverless
+const initApp = async () => {
+  if (!app) {
+    app = await start();
+    await app.ready();
+  }
+  return app;
+};
+
+// Export for Vercel serverless
+module.exports = async (req, res) => {
+  try {
+    // For Vercel deployment
+    if (process.env.VERCEL || process.env.LAMBDA_TASK_ROOT) {
+      const fastifyApp = await initApp();
+      fastifyApp.server.emit('request', req, res);
+    } else {
+      // This shouldn't be reached in serverless, but just in case
       res.statusCode = 500;
-      res.setHeader('Content-Type', 'application/json');
-      res.end(JSON.stringify({
-        error: 'Internal Server Error',
-        message: 'Failed to initialize application'
-      }));
+      res.end('Serverless handler called in non-serverless environment');
     }
-  };
-} else {
+  } catch (error) {
+    console.error('Serverless error:', error);
+    res.statusCode = 500;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({
+      error: 'Internal Server Error',
+      message: 'Failed to initialize application'
+    }));
+  }
+};
+
+// Start server for local development
+if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT && require.main === module) {
   start();
 }
