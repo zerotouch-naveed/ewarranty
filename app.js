@@ -90,10 +90,17 @@ const start = async () => {
       await fastify.register(require('@fastify/swagger-ui'), {
         routePrefix: '/docs',
         uiConfig: {
-          url: 'https://ewarranty-oefb.vercel.app/docs', // adjust if needed
-          docExpansion: 'list',
+          docExpansion: 'full',
           deepLinking: false
         },
+        staticCSP: true,
+        transformStaticCSP: (header) => header,
+        uiHooks: {
+          onRequest: async (request, reply) => {},
+          preHandler: async (request, reply) => {}
+        },
+        // 👇 Force it to use the correct public URL of your spec
+        url: 'https://ewarranty-oefb.vercel.app/docs/json'
       });
     // Register error handler
     fastify.setErrorHandler(errorHandler);
