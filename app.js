@@ -49,8 +49,7 @@ const start = async () => {
       allowedHeaders: ['Content-Type', 'Authorization']
     });
 
-    // Only add rate limiting in non-serverless environments
-    if (!process.env.VERCEL && !process.env.LAMBDA_TASK_ROOT) {
+
       await fastify.register(require('@fastify/rate-limit'), {
         max: 100,
         timeWindow: '1 minute'
@@ -74,8 +73,6 @@ const start = async () => {
         prefix: '/uploads/'
       });
 
-      
-    }
     // Swagger documentation
       await fastify.register(require('@fastify/swagger'), {
         swagger: {
