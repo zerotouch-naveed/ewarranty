@@ -4,7 +4,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const readline = require('readline');
-const { Company, User, UserHierarchy } = require('../schemas');
+const { Company, User, UserHierarchy, WalletManagement } = require('../schemas');
 const { CompanyService, HierarchyService } = require('../services');
 
 // Create readline interface for user input
@@ -92,10 +92,10 @@ const collectMainCompanyInfo = async () => {
   companyInfo.address.country = await prompt('Country: ');
   companyInfo.address.zipCode = await prompt('ZIP/Postal Code: ');
 
-  // Key allocation
-  console.log('\n🔑 Initial Key Allocation:');
-  const totalKeys = await prompt('Total warranty keys for system (default: 10000): ');
-  companyInfo.totalKeys = parseInt(totalKeys) || 10000;
+  // Wallet allocation
+  console.log('\n🔑 Initial Wallet Allocation:');
+  const totalAmount = await prompt('Total Wallet Balance for system (default: 1000000): ');
+  companyInfo.totalAmount = parseInt(totalAmount) || 1000000;
 
   return companyInfo;
 };
@@ -181,7 +181,7 @@ const setupMainCompany = async () => {
     console.log(`Company Email: ${companyInfo.email}`);
     console.log(`Owner Name: ${ownerInfo.name}`);
     console.log(`Owner Email: ${ownerInfo.email}`);
-    console.log(`Total Keys: ${companyInfo.totalKeys.toLocaleString()}`);
+    console.log(`Total Wallet Amount: ${companyInfo.totalAmount.toLocaleString()}`);
     console.log(`Address: ${companyInfo.address.city}, ${companyInfo.address.state}, ${companyInfo.address.country}`);
 
     const confirm = await prompt('\n✅ Create main company with these details? (y/N): ');
@@ -209,10 +209,10 @@ const setupMainCompany = async () => {
       email: companyInfo.email,
       phone: companyInfo.phone,
       address: companyInfo.address,
-      keyAllocation: {
-        totalKeys: companyInfo.totalKeys,
-        usedKeys: 0,
-        remainingKeys: companyInfo.totalKeys
+      walletBalance: {
+        totalAmount: companyInfo.totalAmount,
+        usedAmount: 0,
+        remainingAmount: companyInfo.totalAmount
       },
       settings: {
         timezone: 'UTC',
@@ -236,10 +236,10 @@ const setupMainCompany = async () => {
       isActive: true,
       parentUserId: null,
       hierarchyLevel: 0,
-      keyAllocation: {
-        totalKeys: companyInfo.totalKeys,
-        usedKeys: 0,
-        remainingKeys: companyInfo.totalKeys
+      walletBalance: {
+        totalAmount: companyInfo.totalAmount,
+        usedAmount: 0,
+        remainingAmount: companyInfo.totalAmount
       },
       permissions: {
         canCreateUser: true,
@@ -261,6 +261,19 @@ const setupMainCompany = async () => {
     await mainOwner.save();
     console.log('✅ Main owner user created:', mainOwner.userId);
 
+    // Create wallet management record
+    const walletRecord = new WalletManagement({
+      transactionId: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      companyId:mainCompany.companyId,
+      transactionType: 'SELF-ALLOCATION',
+      toUserId: mainOwner.userId,
+      amount: companyInfo.totalAmount,
+      isActive: true,
+      isRestrictedOperation: true
+    });
+
+    await walletRecord.save();
+
     // Create user hierarchy
     await HierarchyService.createUserHierarchy(mainOwner.userId, null, mainCompany.companyId);
     console.log('✅ User hierarchy initialized');
@@ -273,7 +286,7 @@ const setupMainCompany = async () => {
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`Company ID: ${mainCompany.companyId}`);
     console.log(`Company Type: MAIN`);
-    console.log(`Total Keys: ${companyInfo.totalKeys.toLocaleString()}`);
+    console.log(`Total Balance: ${companyInfo.totalAmount.toLocaleString()}`);
     console.log(`Owner ID: ${mainOwner.userId}`);
     console.log(`Owner Type: MAIN_OWNER`);
     console.log(`Created: ${new Date().toLocaleDateString()}`);
@@ -289,7 +302,7 @@ const setupMainCompany = async () => {
     console.log('• Store the password securely');
     console.log('• Change the password after first login');
     console.log('• The main owner has full system access');
-    console.log('• Support employees will NOT be able to transfer keys');
+    console.log('• Support employees will NOT be able to transfer Wallet Amount');
 
     console.log('\n🚀 Next Steps:');
     console.log('━━━━━━━━━━━━━━━━');

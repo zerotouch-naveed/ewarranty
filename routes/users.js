@@ -7,21 +7,46 @@ const bcrypt = require('bcrypt');
 async function userRoutes(fastify, options) {
 
   // ✅ Get all users the current user can manage (based on upward hierarchy)
-  fastify.get('/all', {
+  fastify.post('/get-all', {
     preHandler: [authenticate],
     schema: {
       description: 'Get users based on hierarchy',
       tags: ['Users'],
-      security: [{ Bearer: [] }]
+      security: [{ Bearer: [] }],
+      body: {
+        type: 'object',
+        required: ['userType'],
+        properties: {
+          userType: { 
+            type: 'string',
+            enum: [
+                "ALL",
+                "TSM",
+                "ASM",
+                "SALES_EXECUTIVE",
+                "SUPER_DISTRIBUTOR",
+                "DISTRIBUTOR",
+                "NATIONAL_DISTRIBUTOR",
+                "MINI_DISTRIBUTOR",
+                "RETAILER",
+                "WHITELABEL_OWNER"
+              ],
+          }
+        }
+      }
     }
   }, catchAsync(async (request, reply) => {
-    const manageableUsers = await HierarchyService.getManageableUsers(request.user.userId);
+    const { userType } = request.body;
+    const manageableUsers = await HierarchyService.getManageableUsers(request.user.userId, userType);
 
     const usersResponse = manageableUsers.map(user => {
       const userObj = user.toObject();
       delete userObj.password;
       return userObj;
     });
+
+    console.log('usersResponse     ',usersResponse);
+    
 
     return reply.send({
       success: true,

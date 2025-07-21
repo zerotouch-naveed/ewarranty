@@ -23,7 +23,7 @@ const connectDB = require('./config/database');
 const authRoutes = require('./routes/auth');
 const companyRoutes = require('./routes/companies');
 const userRoutes = require('./routes/users');
-const keyRoutes = require('./routes/keys');
+const keyRoutes = require('./routes/wallet');
 const customerRoutes = require('./routes/customers');
 const warrantyRoutes = require('./routes/warranty-plans');
 const claimRoutes = require('./routes/claims');
@@ -96,7 +96,7 @@ const start = async () => {
     await fastify.register(require('@fastify/swagger-ui'), {
       routePrefix: '/docs',
       uiConfig: {
-        docExpansion: 'full',
+        docExpansion: 'list',
         deepLinking: false
       }
     });
@@ -134,7 +134,7 @@ const start = async () => {
     await fastify.register(authRoutes, { prefix: '/api/auth' });
     await fastify.register(companyRoutes, { prefix: '/api/companies' });
     await fastify.register(userRoutes, { prefix: '/api/users' });
-    await fastify.register(keyRoutes, { prefix: '/api/keys' });
+    await fastify.register(keyRoutes, { prefix: '/api/wallet' });
     await fastify.register(customerRoutes, { prefix: '/api/customers' });
     await fastify.register(warrantyRoutes, { prefix: '/api/warranty-plans' });
     await fastify.register(claimRoutes, { prefix: '/api/claims' });

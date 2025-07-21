@@ -77,7 +77,7 @@ Support employees must be assigned to specific resources:
 │   ├── auth.js                       # Authentication routes
 │   ├── companies.js                  # Main + white-label company management
 │   ├── users.js                      # User management with new types
-│   ├── keys.js                       # Key management (restricted for support)
+│   ├── wallet.js                       # Key management (restricted for support)
 │   ├── customers.js                  # Customer/warranty routes
 │   ├── warranty-plans.js             # Warranty plan routes
 │   ├── claims.js                     # Claims management routes
@@ -101,7 +101,7 @@ Support employees must be assigned to specific resources:
 5. **SupportAssignment** - Tracks which support employees are assigned where
 6. **Customer** - Extended warranty customers
 7. **WarrantyPlan** - Available warranty plans
-8. **KeyManagement** - Key allocation with support employee restrictions
+8. **WalletManagement** - Wallet Amount allocation with support employee restrictions
 9. **Claim** - Warranty claims
 10. **AuditLog** - Enhanced audit trail with on-behalf-of tracking
 11. **Settings** - Company-specific settings

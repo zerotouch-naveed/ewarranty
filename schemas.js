@@ -51,16 +51,16 @@ const companySchema = new Schema({
     type: Boolean,
     default: true
   },
-  keyAllocation: {
-    totalKeys: {
+  walletBalance: {
+    totalAmount: {
       type: Number,
       default: 0
     },
-    usedKeys: {
+    usedAmount: {
       type: Number,
       default: 0
     },
-    remainingKeys: {
+    remainingAmount: {
       type: Number,
       default: 0
     }
@@ -189,23 +189,23 @@ const supportPermissionSchema = new Schema({
       default: false
     },
     
-    // Key related permissions (NEVER allowed for support employees)
-    canTransferKeys: {
+    // Wallet related permissions (NEVER allowed for support employees)
+    canTransferWallet: {
       type: Boolean,
-      default: false, // Always false for support employees
-      immutable: true // Can't be changed
+      default: false,
+      immutable: true
     },
-    canAllocateKeys: {
+    canAllocateWallet: {
       type: Boolean,
-      default: false, // Always false for support employees
-      immutable: true // Can't be changed
+      default: false,
+      immutable: true
     },
-    canRevokeKeys: {
+    canRevokeWallet: {
       type: Boolean,
-      default: false, // Always false for support employees
-      immutable: true // Can't be changed
+      default: false,
+      immutable: true
     },
-    canViewKeyHistory: {
+    canViewWalletHistory: {
       type: Boolean,
       default: false
     },
@@ -315,18 +315,45 @@ const userSchema = new Schema({
     country: String,
     zipCode: String
   },
-  keyAllocation: {
-    totalKeys: {
+  walletBalance: {
+    totalAmount: {
       type: Number,
       default: 0
     },
-    usedKeys: {
+    usedAmount: {
       type: Number,
       default: 0
     },
-    remainingKeys: {
+    remainingAmount: {
       type: Number,
       default: 0
+    }
+  },
+  // NEW: E-warranty statistics tracking
+  eWarrantyStats: {
+    totalWarranties: {
+      type: Number,
+      default: 0
+    },
+    activeWarranties: {
+      type: Number,
+      default: 0
+    },
+    expiredWarranties: {
+      type: Number,
+      default: 0
+    },
+    claimedWarranties: {
+      type: Number,
+      default: 0
+    },
+    totalPremiumCollected: {
+      type: Number,
+      default: 0
+    },
+    lastWarrantyDate: {
+      type: Date,
+      default: null
     }
   },
   // Support employee specific permissions
@@ -530,9 +557,9 @@ const supportAssignmentSchema = new Schema({
   }
 });
 
-// 6. Key Management Schema (Updated with restrictions for support employees)
-const keyManagementSchema = new Schema({
-  keyId: {
+// NEW: Wallet Management Schema (replaces KeyManagement)
+const walletManagementSchema = new Schema({
+  transactionId: {
     type: String,
     required: true,
     unique: true,
@@ -543,9 +570,9 @@ const keyManagementSchema = new Schema({
     required: true,
     ref: 'Company'
   },
-  keyType: {
+  transactionType: {
     type: String,
-    enum: ['ALLOCATION', 'USAGE', 'REVOKE'],
+    enum: ['SELF-ALLOCATION','ALLOCATION', 'WARRANTY_USAGE', 'REVOKE', 'REFUND'],
     required: true
   },
   fromUserId: {
@@ -558,9 +585,32 @@ const keyManagementSchema = new Schema({
     ref: 'User',
     required: true
   },
-  keyCount: {
+  amount: {
     type: Number,
     required: true
+  },
+  // For warranty usage transactions
+  warrantyKey: {
+    type: String,
+    default: null,
+  },
+  customerDetails: {
+    customerId: {
+      type: String,
+      default: null
+    },
+    customerName: {
+      type: String,
+      default: null
+    },
+    productModel: {
+      type: String,
+      default: null
+    },
+    premiumAmount: {
+      type: Number,
+      default: null
+    }
   },
   isActive: {
     type: Boolean,
@@ -573,7 +623,7 @@ const keyManagementSchema = new Schema({
   // Support employee restriction
   isRestrictedOperation: {
     type: Boolean,
-    default: true // Key operations are always restricted for support employees
+    default: true
   },
   transactionDate: {
     type: Date,
@@ -966,7 +1016,7 @@ const auditLogSchema = new Schema({
     required: true,
     enum: [
       'CREATE', 'UPDATE', 'DELETE', 'VIEW', 'LOGIN', 'LOGOUT', 
-      'KEY_ALLOCATION', 'KEY_USAGE', 'KEY_REVOKE',
+      'WALLET_ALLOCATION', 'WALLET_WARRANTY_USAGE', 'WALLET_REVOKE',
       'SUPPORT_ASSIGNMENT', 'PERMISSION_CHANGE', 'CROSS_COMPANY_ACCESS'
     ]
   },
@@ -1069,9 +1119,10 @@ supportAssignmentSchema.index({ supportEmployeeId: 1, isActive: 1 });
 supportAssignmentSchema.index({ targetCompanyId: 1, targetUserId: 1 });
 customerSchema.index({ companyId: 1, retailerId: 1 });
 customerSchema.index({ 'dates.createdDate': 1 });
-keyManagementSchema.index({ companyId: 1, toUserId: 1 });
-keyManagementSchema.index({ transactionDate: -1 });
-keyManagementSchema.index({ isRestrictedOperation: 1 });
+walletManagementSchema.index({ companyId: 1, toUserId: 1 });
+walletManagementSchema.index({ transactionDate: -1 });
+walletManagementSchema.index({ transactionType: 1 });
+walletManagementSchema.index({ warrantyKey: 1 });
 claimSchema.index({ companyId: 1, customerId: 1 });
 claimSchema.index({ claimStatus: 1, claimDate: -1 });
 auditLogSchema.index({ companyId: 1, userId: 1 });
@@ -1083,13 +1134,13 @@ auditLogSchema.index({ 'onBehalfOf.userId': 1 });
 userSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   
-  // Ensure support employees can't have key permissions
+  // Ensure support employees can't have wallet permissions
   if (this.userType.includes('SUPPORT_EMPLOYEE')) {
-    this.permissions.canManageKeys = false;
+    this.permissions.canManageWallet = false;
     if (this.supportPermissions.effectivePermissions) {
-      this.supportPermissions.effectivePermissions.canTransferKeys = false;
-      this.supportPermissions.effectivePermissions.canAllocateKeys = false;
-      this.supportPermissions.effectivePermissions.canRevokeKeys = false;
+      this.supportPermissions.effectivePermissions.canTransferWallet = false;
+      this.supportPermissions.effectivePermissions.canAllocateWallet = false;
+      this.supportPermissions.effectivePermissions.canRevokeWallet = false;
     }
   }
   
@@ -1108,9 +1159,9 @@ companySchema.pre('save', function(next) {
 
 supportPermissionSchema.pre('save', function(next) {
   // Ensure key permissions are always false for support permissions
-  this.permissions.canTransferKeys = false;
-  this.permissions.canAllocateKeys = false;
-  this.permissions.canRevokeKeys = false;
+  this.permissions.canTransferWallet = false;
+  this.permissions.canAllocateWallet = false;
+  this.permissions.canRevokeWallet = false;
   this.updatedAt = Date.now();
   next();
 });
@@ -1151,7 +1202,7 @@ const User = mongoose.model('User', userSchema);
 const UserHierarchy = mongoose.model('UserHierarchy', userHierarchySchema);
 const SupportPermission = mongoose.model('SupportPermission', supportPermissionSchema);
 const SupportAssignment = mongoose.model('SupportAssignment', supportAssignmentSchema);
-const KeyManagement = mongoose.model('KeyManagement', keyManagementSchema);
+const WalletManagement = mongoose.model('WalletManagement', walletManagementSchema);
 const Customer = mongoose.model('Customer', customerSchema);
 const WarrantyPlan = mongoose.model('WarrantyPlan', warrantyPlanSchema);
 const Claim = mongoose.model('Claim', claimSchema);
@@ -1164,7 +1215,7 @@ module.exports = {
   UserHierarchy,
   SupportPermission,
   SupportAssignment,
-  KeyManagement,
+  WalletManagement,
   Customer,
   WarrantyPlan,
   Claim,

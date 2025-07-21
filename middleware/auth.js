@@ -54,8 +54,6 @@ const authenticate = async (request, reply) => {
           companyId: user.companyId
         }
       }
-
-      console.log('company    ',company);
       
       
       request.user = {

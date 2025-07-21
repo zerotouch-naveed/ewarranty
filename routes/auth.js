@@ -37,7 +37,7 @@ async function authRoutes(fastify, options) {
                 "DISTRIBUTOR",
                 "NATIONAL_DISTRIBUTOR",
                 "MINI_DISTRIBUTOR",
-                "RETAILER",
+                "RETAILER"
               ],
             },
             alternatePhone: { type: "string" },

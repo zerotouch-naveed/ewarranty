@@ -1,8 +1,8 @@
 const { authenticate } = require('../middleware/auth');
-const { KeyManagementService } = require('../services');
+const { WalletManagementService  } = require('../services');
 const { catchAsync } = require('../middleware/errorHandler');
 
-async function keyRoutes(fastify, options) {
+async function walletRoutes(fastify, options) {
   
   // Allocate Keys
   fastify.post('/allocate', {
@@ -23,7 +23,7 @@ async function keyRoutes(fastify, options) {
   }, catchAsync(async (request, reply) => {
     const { toUserId, keyCount } = request.body;
     
-    const keyRecord = await KeyManagementService.allocateKeys(
+    const keyRecord = await WalletManagementService.allocateWalletAmount(
       request.user.userId,
       toUserId,
       keyCount,
@@ -46,7 +46,7 @@ async function keyRoutes(fastify, options) {
       security: [{ Bearer: [] }]
     }
   }, catchAsync(async (request, reply) => {
-    const history = await KeyManagementService.getKeyHistory(
+    const history = await WalletManagementService.getWalletHistory(
       request.user.userId,
       request.user.companyId
     );
@@ -56,6 +56,19 @@ async function keyRoutes(fastify, options) {
       data: { history }
     });
   }));
+
+  // Get Wallet Summary
+fastify.get('/summary', {
+  preHandler: [authenticate],
+  schema: {
+    description: 'Get wallet summary for logged-in user',
+    tags: ['Wallet Management'],
+    security: [{ Bearer: [] }]
+  }
+}, catchAsync(async (request, reply) => {
+  const summary = await WalletManagementService.getWalletSummary(request.user.userId);
+  return reply.send({ success: true, data: summary });
+}));
 }
 
-module.exports = keyRoutes;
+module.exports = walletRoutes;

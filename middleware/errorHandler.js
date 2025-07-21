@@ -98,7 +98,7 @@
      reply.code(500).send({
        success: false,
        error: {
-         message: 'Something went wrong!',
+         message: err.message || 'Something went wrong!',
          statusCode: 500
        }
      });

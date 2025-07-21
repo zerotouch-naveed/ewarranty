@@ -92,10 +92,10 @@ const collectWhitelabelInfo = async () => {
   companyInfo.address.country = await prompt('Country: ');
   companyInfo.address.zipCode = await prompt('ZIP/Postal Code: ');
 
-  // Key allocation
-  console.log('\n🔑 Key Allocation:');
-  const totalKeys = await prompt('Total Keys to Allocate (default: 5000): ');
-  companyInfo.totalKeys = parseInt(totalKeys) || 5000;
+  // Wallet allocation
+  console.log('\n🔑 Wallet Amount Allocation:');
+  const totalAmount = await prompt('Total Wallet Balance to Allocate (default: 50000): ');
+  companyInfo.totalAmount = parseInt(totalAmount) || 50000;
 
   // Brand customization
   console.log('\n🎨 Brand Customization (optional):');
@@ -173,26 +173,25 @@ const createWhitelabel = async () => {
     console.log(`🏢 Main Company: ${mainCompany.name}`);
     console.log(`👤 Created By: ${mainOwner.name} (${mainOwner.email})\n`);
 
-    // Check main company key availability
-    if (mainCompany.keyAllocation.remainingKeys <= 0) {
-      console.log('❌ Main company has no remaining keys to allocate');
-      console.log(`   Used: ${mainCompany.keyAllocation.usedKeys}`);
-      console.log(`   Total: ${mainCompany.keyAllocation.totalKeys}`);
+    // Check main company Wallet availability
+    if (mainCompany.walletBalance.remainingAmount <= 0) {
+      console.log('❌ Main company has no remaining Wallet Amount to allocate');
+      console.log(`   Total: ${mainCompany.walletBalance.remainingAmount}`);
       return;
     }
 
     // Collect information
     const companyInfo = await collectWhitelabelInfo();
     
-    // Check if requested keys are available
-    if (companyInfo.totalKeys > mainCompany.keyAllocation.remainingKeys) {
-      console.log(`❌ Not enough keys available. Main company has ${mainCompany.keyAllocation.remainingKeys} keys remaining.`);
-      const useAvailable = await prompt(`Use all available ${mainCompany.keyAllocation.remainingKeys} keys? (y/N): `);
+    // Check if requested Wallet Amount are available
+    if (companyInfo.totalAmount > mainCompany.remainingAmount) {
+      console.log(`❌ Not enough Wallet Amount available. Main company has ${mainCompany.walletBalance.remainingAmount} Amount remaining.`);
+      const useAvailable = await prompt(`Use all available ${mainCompany.walletBalance.remainingAmount} Amount? (y/N): `);
       if (useAvailable.toLowerCase() !== 'y') {
         console.log('❌ Creation cancelled');
         return;
       }
-      companyInfo.totalKeys = mainCompany.keyAllocation.remainingKeys;
+      companyInfo.totalAmount = mainCompany.walletBalance.remainingAmount;
     }
 
     const ownerInfo = await collectOwnerInfo();
@@ -204,7 +203,7 @@ const createWhitelabel = async () => {
     console.log(`Company Email: ${companyInfo.email}`);
     console.log(`Owner: ${ownerInfo.name}`);
     console.log(`Owner Email: ${ownerInfo.email}`);
-    console.log(`Keys Allocated: ${companyInfo.totalKeys.toLocaleString()}`);
+    console.log(`Amount Allocated: ${companyInfo.totalAmount.toLocaleString()}`);
     console.log(`Location: ${companyInfo.address.city}, ${companyInfo.address.state}, ${companyInfo.address.country}`);
     console.log(`Parent Company: ${mainCompany.name}`);
     console.log(`Created By: ${mainOwner.name}`);
@@ -234,11 +233,7 @@ const createWhitelabel = async () => {
       email: companyInfo.email,
       phone: companyInfo.phone,
       address: companyInfo.address,
-      keyAllocation: {
-        totalKeys: companyInfo.totalKeys,
-        usedKeys: 0,
-        remainingKeys: companyInfo.totalKeys
-      },
+      walletBalance: { totalAmount: companyInfo.totalAmount, usedAmount: 0, remainingAmount: companyInfo.totalAmount },
       settings: {
         timezone: 'UTC',
         currency: 'USD'
@@ -248,15 +243,15 @@ const createWhitelabel = async () => {
 
     console.log('✅ White-label company created:', whitelabelCompany.companyId);
 
-    // Update main company key allocation
+    // Update main company Wallet allocation
     await Company.findByIdAndUpdate(mainCompany._id, {
       $inc: {
-        'keyAllocation.usedKeys': companyInfo.totalKeys,
-        'keyAllocation.remainingKeys': -companyInfo.totalKeys
+        'walletBalance.remainingAmount': -companyInfo.totalAmount,
+        'walletBalance.usedAmount': companyInfo.totalAmount
       }
     });
 
-    console.log('✅ Main company key allocation updated');
+    console.log('✅ Main company Wallet allocation updated');
 
     // Create white-label owner
     const hashedPassword = await bcrypt.hash(ownerInfo.password, 12);
@@ -272,10 +267,10 @@ const createWhitelabel = async () => {
       isActive: true,
       parentUserId: null,
       hierarchyLevel: 0,
-      keyAllocation: {
-        totalKeys: companyInfo.totalKeys,
-        usedKeys: 0,
-        remainingKeys: companyInfo.totalKeys
+      walletBalance: {
+        totalAmount: companyInfo.totalAmount,
+        usedAmount: 0,
+        remainingAmount: companyInfo.totalAmount
       },
       permissions: {
         canCreateUser: true,
@@ -307,10 +302,10 @@ const createWhitelabel = async () => {
     console.log('\n📊 Company Details:');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log(`Company ID: ${whitelabelCompany.companyId}`);
-    console.log(`Company Type: WHITELABEL`);
-    console.log(`Parent Company: ${mainCompany.name} (${mainCompany.companyId})`);
-    console.log(`Keys Allocated: ${companyInfo.totalKeys.toLocaleString()}`);
-    console.log(`Owner ID: ${whitelabelOwner.userId}`);
+    console.log('   💰 Wallet:');
+    console.log(`      Total: ${whitelabelCompany.walletBalance.totalAmount}`);
+    console.log(`      usedAmount: ${whitelabelCompany.walletBalance.usedAmount}`);
+    console.log(`      Available: ${whitelabelCompany.walletBalance.remainingAmount}`);
     console.log(`Owner Type: WHITELABEL_OWNER`);
     console.log(`Created: ${new Date().toLocaleDateString()}`);
     console.log(`Created By: ${mainOwner.name} (${mainOwner.userId})`);
@@ -324,9 +319,9 @@ const createWhitelabel = async () => {
     console.log('\n📊 Updated Main Company Status:');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     const updatedMain = await Company.findOne({ companyType: 'MAIN' });
-    console.log(`Remaining Keys: ${updatedMain.keyAllocation.remainingKeys.toLocaleString()}`);
-    console.log(`Used Keys: ${updatedMain.keyAllocation.usedKeys.toLocaleString()}`);
-    console.log(`Total Keys: ${updatedMain.keyAllocation.totalKeys.toLocaleString()}`);
+    console.log(`      Total: ${updatedMain.walletBalance.totalAmount}`);
+    console.log(`      usedAmount: ${updatedMain.walletBalance.usedAmount}`);
+    console.log(`      Available: ${updatedMain.walletBalance.remainingAmount}`);
 
     console.log('\n⚠️  IMPORTANT NOTES:');
     console.log('━━━━━━━━━━━━━━━━━━━━');

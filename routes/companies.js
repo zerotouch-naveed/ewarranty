@@ -14,7 +14,7 @@
        security: [{ Bearer: [] }],
        body: {
          type: 'object',
-         required: ['name', 'email', 'phone', 'address', 'totalKeys', 'owner'],
+         required: ['name', 'email', 'phone', 'address', 'totalAmount', 'owner'],
          properties: {
            name: { type: 'string', minLength: 2, maxLength: 100 },
            email: { type: 'string', format: 'email' },
@@ -30,7 +30,7 @@
                zipCode: { type: 'string', maxLength: 10 }
              }
            },
-           totalKeys: { type: 'integer', minimum: 1 },
+           totalAmount: { type: 'integer', minimum: 1 },
            branding: {
              type: 'object',
              properties: {
@@ -84,12 +84,12 @@
        }
      }
    }, catchAsync(async (request, reply) => {
-     const { name, email, phone, address, totalKeys, branding = {}, owner } = request.body;
+     const { name, email, phone, address, totalAmount, branding = {}, owner } = request.body;
      const parentCompany = await Company.findOne({ companyId: request.user.companyId, companyType: 'MAIN' });
      if (!parentCompany) {
        return reply.code(400).send({ success: false, error: 'Parent (main) company not found.' });
      }
-     if (parentCompany.keyAllocation.remainingKeys < totalKeys) {
+     if (parentCompany.walletBalance.remainingAmount < totalAmount) {
        return reply.code(400).send({ success: false, error: `Not enough keys available. Main company has ${parentCompany.keyAllocation.remainingKeys} keys remaining.` });
      }
      // Check for duplicate company or owner
@@ -111,10 +111,10 @@
        phone,
        address,
        branding,
-       keyAllocation: {
-         totalKeys,
-         usedKeys: 0,
-         remainingKeys: totalKeys
+       walletBalance: {
+         totalAmount,
+         usedAmount: 0,
+         remainingAmount: totalAmount
        },
        settings: {
          timezone: 'UTC',
@@ -126,8 +126,16 @@
      // Update main company key allocation
      await Company.findByIdAndUpdate(parentCompany._id, {
        $inc: {
-         'keyAllocation.usedKeys': totalKeys,
-         'keyAllocation.remainingKeys': -totalKeys
+         'walletBalance.usedAmount': totalAmount,
+         'walletBalance.remainingAmount': -totalAmount
+       }
+     });
+
+
+     await User.findOneAndUpdate({userId:request.user.userId}, {
+       $inc: {
+         'walletBalance.usedAmount': totalAmount,
+         'walletBalance.remainingAmount': -totalAmount
        }
      });
      // Create owner user
@@ -144,10 +152,10 @@
        isActive: true,
        parentUserId: null,
        hierarchyLevel: 0,
-       keyAllocation: {
-         totalKeys,
-         usedKeys: 0,
-         remainingKeys: totalKeys
+       walletBalance: {
+         totalAmount,
+         usedAmount: 0,
+         remainingAmount: totalAmount
        },
        permissions: {
          canCreateUser: true,
@@ -296,7 +304,7 @@
        security: [{ Bearer: [] }]
      }
    }, catchAsync(async (request, reply) => {
-     const { page = 1, limit = 10, search = '', status } = request.query;
+     const { page = 1, limit = 10, search = '', status } = request.body;
  
      const query = {};
      if (search) {

@@ -7,7 +7,7 @@ This document describes the completely redesigned schema and permission system f
 - **Main Company** (your company) that creates and manages white-label companies
 - **White-label Companies** with their own users and hierarchy
 - **Support Employees** with dynamic, configurable permissions
-- **Strict Key Management Restrictions** for support employees
+- **Strict Wallet Management Restrictions** for support employees
 - **Cross-company Access Control** for main company users
 - **Hierarchical Permission System** with proper isolation
 
@@ -17,7 +17,7 @@ This document describes the completely redesigned schema and permission system f
 - **Type**: `MAIN`
 - **Purpose**: Your primary company that creates and manages white-label companies
 - **Users**: Can create white-label companies and access all white-label data
-- **Key Features**:
+- **Wallet Features**:
   - Only one main company can exist
   - Has full access to all white-label companies
   - Can assign support employees to any white-label
@@ -27,7 +27,7 @@ This document describes the completely redesigned schema and permission system f
 - **Type**: `WHITELABEL`
 - **Purpose**: Companies created by the main company for their clients
 - **Users**: Independent hierarchy with their own owners, employees, and support staff
-- **Key Features**:
+- **Wallet Features**:
   - Created by main company users or existing white-label owners
   - Isolated from other white-labels (unless accessed by main company)
   - Can have their own retailers, distributors, and sales hierarchy
@@ -40,18 +40,18 @@ This document describes the completely redesigned schema and permission system f
    - Full system access
    - Can create white-label companies
    - Can create other main company users
-   - Can transfer keys and perform all operations
+   - Can transfer Wallet Amount and perform all operations
 
 2. **MAIN_EMPLOYEE** 
    - Can work on behalf of white-label companies
    - Can create and manage white-label users
-   - Can transfer keys and perform most operations
+   - Can transfer Wallet Amount and perform most operations
    - Cannot create other main company owners
 
 3. **MAIN_SUPPORT_EMPLOYEE**
    - Dynamic permissions based on assigned permission sets
    - Can be assigned to specific white-label companies
-   - **CANNOT transfer, allocate, or revoke keys**
+   - **CANNOT transfer, allocate, or revoke Wallet Amount**
    - Can only perform actions within assigned scope
 
 ### White-label Company Users
@@ -59,17 +59,17 @@ This document describes the completely redesigned schema and permission system f
    - Full access within their company
    - Can create other white-label users
    - Can manage their company settings
-   - Can transfer keys within their hierarchy
+   - Can transfer Wallet Amount within their hierarchy
 
 2. **WHITELABEL_EMPLOYEE**
    - Standard employee access within their company
    - Can manage users and customers in their hierarchy
-   - Can transfer keys within their hierarchy
+   - Can transfer Wallet Amount within their hierarchy
 
 3. **WHITELABEL_SUPPORT_EMPLOYEE**
    - Dynamic permissions based on assigned permission sets
    - Can only work within their company hierarchy
-   - **CANNOT transfer, allocate, or revoke keys**
+   - **CANNOT transfer, allocate, or revoke Wallet Amount**
    - Limited to assigned users/customers
 
 ### Legacy User Types (Maintained for Compatibility)
@@ -84,7 +84,7 @@ Support employees have configurable permissions instead of fixed roles:
 
 #### Customer/User Management
 - `canViewCustomers`: View customer data
-- `canCreateCustomers`: Create new customers (using retailer's keys)
+- `canCreateCustomers`: Create new customers (using retailer's Wallet Amount)
 - `canEditCustomers`: Modify customer information
 - `canDeleteCustomers`: Remove customers
 - `canViewUsers`: View user data in hierarchy
@@ -105,16 +105,16 @@ Support employees have configurable permissions instead of fixed roles:
 #### Reports and Data
 - `canViewReports`: Access reporting data
 - `canExportData`: Export data to files
-- `canViewKeyHistory`: View key allocation history (read-only)
+- `canViewWalletHistory`: View Wallet allocation history (read-only)
 
 #### Cross-Company Access (Main Company Only)
 - `canAccessCrossCompany`: Support employees can work across white-labels
 - `hierarchyLevelAccess`: Defines how deep in hierarchy they can access
 
-#### Key Operations (ALWAYS RESTRICTED)
-- `canTransferKeys`: **ALWAYS FALSE** - Support employees cannot transfer keys
-- `canAllocateKeys`: **ALWAYS FALSE** - Support employees cannot allocate keys  
-- `canRevokeKeys`: **ALWAYS FALSE** - Support employees cannot revoke keys
+#### Wallet Operations (ALWAYS RESTRICTED)
+- `canTransferWallet Amount`: **ALWAYS FALSE** - Support employees cannot transfer Wallet Amount
+- `canAllocateWallet Amount`: **ALWAYS FALSE** - Support employees cannot allocate Wallet Amount  
+- `canRevokeWallet Amount`: **ALWAYS FALSE** - Support employees cannot revoke Wallet Amount
 
 ### Assignment System
 Support employees must be assigned to specific resources:
@@ -123,25 +123,25 @@ Support employees must be assigned to specific resources:
 2. **User Assignment**: Access to specific users and their subordinates
 3. **Hierarchy Assignment**: Access to users up to a certain hierarchy level
 
-## Key Management Restrictions
+## Wallet Management Restrictions
 
-### Who Can Perform Key Operations
-- ✅ **Main Company Owners & Employees**: Full key management
+### Who Can Perform Wallet Operations
+- ✅ **Main Company Owners & Employees**: Full Wallet management
 - ✅ **White-label Owners & Employees**: Within their hierarchy
 - ✅ **Legacy Users (TSM, ASM, etc.)**: Within their hierarchy
-- ❌ **ALL Support Employees**: Cannot perform ANY key operations
+- ❌ **ALL Support Employees**: Cannot perform ANY Wallet operations
 
-### Key Operations Restricted for Support Employees
-1. **Transfer Keys**: Moving keys between users
-2. **Allocate Keys**: Giving keys to subordinates
-3. **Revoke Keys**: Taking keys back from users
-4. **Use Keys**: Creating warranties (support can create on behalf of retailers)
+### Wallet Operations Restricted for Support Employees
+1. **Transfer Wallet Amount**: Moving Wallet Amount between users
+2. **Allocate Wallet Amount**: Giving Wallet Amount to subordinates
+3. **Revoke Wallet Amount**: Taking Wallet Amount back from users
+4. **Use Wallet Amount**: Creating warranties (support can create on behalf of retailers)
 
 ### What Support Employees CAN Do
-- View key history (if permitted)
-- Create customers using retailer's keys (on behalf of retailer)
-- View key allocation data for reporting
-- Assist with key-related issues (but not perform operations)
+- View Wallet history (if permitted)
+- Create customers using retailer's Wallet Amount (on behalf of retailer)
+- View Wallet allocation data for reporting
+- Assist with Wallet-related issues (but not perform operations)
 
 ## Hierarchy and Access Control
 
@@ -179,9 +179,9 @@ Defines permission sets that can be assigned to support employees:
     canViewCustomers: Boolean,
     canCreateCustomers: Boolean,
     // ... other permissions
-    canTransferKeys: false, // Always false, immutable
-    canAllocateKeys: false, // Always false, immutable
-    canRevokeKeys: false    // Always false, immutable
+    canTransferWallet Amount: false, // Always false, immutable
+    canAllocateWallet Amount: false, // Always false, immutable
+    canRevokeWallet Amount: false    // Always false, immutable
   }
 }
 ```
@@ -262,7 +262,7 @@ await SupportPermissionService.createPermissionSet({
     canEditCustomers: false,
     canViewUsers: true,
     canViewReports: true,
-    canTransferKeys: false // Always false
+    canTransferWallet Amount: false // Always false
   }
 }, mainOwnerUserId);
 ```
@@ -307,15 +307,15 @@ const canEdit = await HierarchyService.checkUserPermission(
 
 ### Phase 4: Testing and Rollout
 1. Test all permission scenarios
-2. Verify key operation restrictions
+2. Verify Wallet operation restrictions
 3. Validate cross-company access controls
 
 ## Security Features
 
-### Key Operation Security
-- **Immutable Restrictions**: Support employees can NEVER get key permissions
-- **Pre-save Middleware**: Automatically prevents key permissions on support employees
-- **API Layer Protection**: Multiple checks prevent key operations by support employees
+### Wallet Operation Security
+- **Immutable Restrictions**: Support employees can NEVER get Wallet permissions
+- **Pre-save Middleware**: Automatically prevents Wallet permissions on support employees
+- **API Layer Protection**: Multiple checks prevent Wallet operations by support employees
 
 ### Access Control
 - **Hierarchy-based**: Users can only access their subordinates
@@ -333,7 +333,7 @@ const canEdit = await HierarchyService.checkUserPermission(
 ### For Main Company
 - Full control over all white-label operations
 - Ability to provide support across all white-labels
-- Centralized user management and key control
+- Centralized user management and Wallet control
 - Detailed audit trails for compliance
 
 ### For White-label Companies
@@ -348,4 +348,4 @@ const canEdit = await HierarchyService.checkUserPermission(
 - Proper attribution in audit logs
 - Scope-limited access prevents data breaches
 
-This new system provides a robust, secure, and scalable foundation for your multi-tenant white-label application with proper separation of concerns and strict security controls around key management.
+This new system provides a robust, secure, and scalable foundation for your multi-tenant white-label application with proper separation of concerns and strict security controls around Wallet management.

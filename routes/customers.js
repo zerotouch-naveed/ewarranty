@@ -111,15 +111,27 @@
    }));
  
    // Get Customers (based on hierarchy)
-   fastify.get('/all', {
+   fastify.post('/all', {
      preHandler: [authenticate],
      schema: {
        description: 'Get customers based on hierarchy',
        tags: ['Customers'],
-       security: [{ Bearer: [] }]
+       security: [{ Bearer: [] }],
+       body: {
+      type: 'object',
+      required: [],
+      properties: {
+        status: { type: 'integer' },
+        startDate: { type: 'string', format: 'date' },
+        endDate: { type: 'string', format: 'date' },
+        page: { type: 'integer' },
+        limit: { type: 'integer' },
+        search: { type: 'string' }
+      }
+    },
      }
    }, catchAsync(async (request, reply) => {
-     const { status, startDate, endDate } = request.query;
+     const { status, startDate, endDate, page = 1, limit = 1, search = '' } = request.body;
      
      const filters = {};
      if (status) filters.status = parseInt(status);
@@ -135,6 +147,9 @@
        request.user.companyId,
        request.user.userType,
        filters,
+       page,
+       limit,
+       search
      );
  
      return reply.send({

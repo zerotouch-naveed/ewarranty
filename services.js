@@ -1,4 +1,5 @@
-const { User, UserHierarchy, KeyManagement, Customer, AuditLog, Company, SupportPermission, SupportAssignment } = require('./schemas');
+const { query } = require('winston');
+const { User, UserHierarchy, WalletManagement, Customer, AuditLog, Company, SupportPermission, SupportAssignment } = require('./schemas');
 
 // Company Management Service
 class CompanyService {
@@ -503,73 +504,79 @@ class HierarchyService {
     return false;
   }
 
-  static async getManageableUsers(managerUserId) {
+  static async getManageableUsers(managerUserId, userType = null) {
     const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId });
-    console.log('hierarchies      ', hierarchies);
-    
     const userIds = hierarchies.map(h => h.userId);
-    const users = await User.find({ userId: { $in: userIds } });
+    let query = { userId: { $in: userIds } };
+    if (userType && userType !== 'ALL') {
+      query.userType = userType;
+    }
+    const users = await User.find(query).sort({ createdAt: -1 });
     return users;
   }
 }
 
-// Enhanced Key Management Service (with support employee restrictions)
-class KeyManagementService {
+// Enhanced Wallet Management Service (formerly Key Management)
+class WalletManagementService {
   
-  // Allocate keys from parent to child (RESTRICTED for support employees)
-  static async allocateKeys(fromUserId, toUserId, keyCount, companyId) {
+  // Allocate wallet amount from parent to child (RESTRICTED for support employees)
+  static async allocateWalletAmount(fromUserId, toUserId, amount, companyId) {
     try {
       // Check if fromUser is a support employee (not allowed)
       const fromUser = await User.findOne({ userId: fromUserId });
       if (!fromUser) throw new Error('From user not found');
       
       if (fromUser.userType.includes('SUPPORT_EMPLOYEE')) {
-        throw new Error('Support employees cannot allocate keys');
+        throw new Error('Support employees cannot allocate wallet amounts');
       }
 
-      // Check if fromUser has enough keys
-      if (fromUser.keyAllocation.remainingKeys < keyCount) {
-        throw new Error('Insufficient keys to allocate');
+      // Check if fromUser has enough wallet balance
+      if (fromUser.walletBalance.remainingAmount < amount) {
+        throw new Error('Insufficient wallet balance to allocate');
       }
 
       // Check if users are in the same hierarchy
       const hasPermission = await HierarchyService.checkUserPermission(fromUserId, toUserId, 'EDIT');
       if (!hasPermission) {
-        throw new Error('No permission to allocate keys to this user');
+        throw new Error('No permission to allocate wallet amount to this user');
       }
+
       const targetUser = await User.findOne({ userId: toUserId });
+      if (!targetUser) throw new Error('Target user not found');
 
-      if (fromUser.userType.startsWith('MAIN_') || fromUser?.userType.startsWith('WHITELABEL_OWNER')){
+      // Update company wallet if allocating from MAIN or WHITELABEL_OWNER
+      if (fromUser.userType.startsWith('MAIN_') || fromUser.userType.startsWith('WHITELABEL_OWNER')) {
         await Company.updateOne(
-          {companyId: fromUser.companyId},
+          { companyId: fromUser.companyId },
           {
             $inc: {
-              'keyAllocation.usedKeys': keyCount,
-              'keyAllocation.remainingKeys': -keyCount
+              'walletBalance.usedAmount': amount,
+              'walletBalance.remainingAmount': -amount
             }
           }
         );
       }
 
-
-      if (targetUser?.userType.startsWith('WHITELABEL_OWNER')){
+      // Update target company wallet if allocating to WHITELABEL_OWNER
+      if (targetUser.userType.startsWith('WHITELABEL_OWNER')) {
         await Company.updateOne(
-          {companyId: target.companyId},
+          { companyId: targetUser.companyId },
           {
             $inc: {
-              'keyAllocation.usedKeys': keyCount,
-              'keyAllocation.remainingKeys': -keyCount
+              'walletBalance.totalAmount': amount,
+              'walletBalance.remainingAmount': amount
             }
           }
         );
       }
-      // Update key counts
+
+      // Update wallet balances
       await User.updateOne(
         { userId: fromUserId },
         {
           $inc: {
-            'keyAllocation.usedKeys': keyCount,
-            'keyAllocation.remainingKeys': -keyCount
+            'walletBalance.usedAmount': amount,
+            'walletBalance.remainingAmount': -amount
           }
         }
       );
@@ -578,68 +585,68 @@ class KeyManagementService {
         { userId: toUserId },
         {
           $inc: {
-            'keyAllocation.totalKeys': keyCount,
-            'keyAllocation.remainingKeys': keyCount
+            'walletBalance.totalAmount': amount,
+            'walletBalance.remainingAmount': amount
           }
         }
       );
 
-      // Create key management record
-      const keyRecord = new KeyManagement({
-        keyId: `KEY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Create wallet management record
+      const walletRecord = new WalletManagement({
+        transactionId: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         companyId,
-        keyType: 'ALLOCATION',
+        transactionType: 'ALLOCATION',
         fromUserId,
         toUserId,
-        keyCount,
+        amount,
         isActive: true,
         isRestrictedOperation: true
       });
 
-      await keyRecord.save();
+      await walletRecord.save();
 
       // Create audit log
-      await CompanyService.createAuditLog(fromUserId, 'KEY_ALLOCATION', 'KEY', keyRecord.keyId, null, {
+      await CompanyService.createAuditLog(fromUserId, 'WALLET_ALLOCATION', 'WALLET', walletRecord.transactionId, null, {
         fromUserId,
         toUserId,
-        keyCount
+        amount
       }, companyId);
 
-      return keyRecord;
+      return walletRecord;
     } catch (error) {
-      throw new Error(`Error allocating keys: ${error.message}`);
+      throw new Error(`Error allocating wallet amount: ${error.message}`);
     }
   }
 
-  // Revoke keys from a user (RESTRICTED for support employees)
-  static async revokeKeys(fromUserId, targetUserId, keyCount, companyId) {
+  // Revoke wallet amount from a user (RESTRICTED for support employees)
+  static async revokeWalletAmount(fromUserId, targetUserId, amount, companyId) {
     try {
       // Check if fromUser is a support employee (not allowed)
       const fromUser = await User.findOne({ userId: fromUserId });
       if (!fromUser) throw new Error('From user not found');
       
       if (fromUser.userType.includes('SUPPORT_EMPLOYEE')) {
-        throw new Error('Support employees cannot revoke keys');
+        throw new Error('Support employees cannot revoke wallet amounts');
       }
 
       // Check permissions
       const hasPermission = await HierarchyService.checkUserPermission(fromUserId, targetUserId, 'EDIT');
       if (!hasPermission) {
-        throw new Error('No permission to revoke keys from this user');
+        throw new Error('No permission to revoke wallet amount from this user');
       }
 
       const targetUser = await User.findOne({ userId: targetUserId });
-      if (!targetUser || targetUser.keyAllocation.remainingKeys < keyCount) {
-        throw new Error('User does not have enough keys to revoke');
+      if (!targetUser || targetUser.walletBalance.remainingAmount < amount) {
+        throw new Error('User does not have enough wallet balance to revoke');
       }
 
-      // Update key counts
+      // Update wallet balances
       await User.updateOne(
         { userId: targetUserId },
         {
           $inc: {
-            'keyAllocation.totalKeys': -keyCount,
-            'keyAllocation.remainingKeys': -keyCount
+            'walletBalance.totalAmount': -amount,
+            'walletBalance.remainingAmount': -amount
           }
         }
       );
@@ -648,122 +655,250 @@ class KeyManagementService {
         { userId: fromUserId },
         {
           $inc: {
-            'keyAllocation.usedKeys': -keyCount,
-            'keyAllocation.remainingKeys': keyCount
+            'walletBalance.usedAmount': -amount,
+            'walletBalance.remainingAmount': amount
           }
         }
       );
 
-      // Create key management record
-      const keyRecord = new KeyManagement({
-        keyId: `KEY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Create wallet management record
+      const walletRecord = new WalletManagement({
+        transactionId: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         companyId,
-        keyType: 'REVOKE',
+        transactionType: 'REVOKE',
         fromUserId,
         toUserId: targetUserId,
-        keyCount,
+        amount,
         isActive: true,
         isRestrictedOperation: true
       });
 
-      await keyRecord.save();
+      await walletRecord.save();
 
       // Create audit log
-      await CompanyService.createAuditLog(fromUserId, 'KEY_REVOCATION', 'KEY', keyRecord.keyId, null, {
+      await CompanyService.createAuditLog(fromUserId, 'WALLET_REVOCATION', 'WALLET', walletRecord.transactionId, null, {
         fromUserId,
         targetUserId,
-        keyCount
+        amount
       }, companyId);
 
-      return keyRecord;
+      return walletRecord;
     } catch (error) {
-      throw new Error(`Error revoking keys: ${error.message}`);
+      throw new Error(`Error revoking wallet amount: ${error.message}`);
     }
   }
 
-  // Use a key to create a customer warranty
-  static async useKey(retailerId, companyId) {
+  // Use wallet amount to create a customer warranty (deduct premium)
+  static async useWalletForWarranty(retailerId, premiumAmount, companyId, customerData) {
     try {
       const retailer = await User.findOne({ userId: retailerId });
-      if (!retailer || retailer.keyAllocation.remainingKeys < 1) {
-        throw new Error('No keys available to use');
+      if (!retailer || retailer.walletBalance.remainingAmount < premiumAmount) {
+        throw new Error('Insufficient wallet balance to create warranty');
       }
 
-      // Support employees can't use keys directly
+      // Support employees can't use wallet directly
       if (retailer.userType.includes('SUPPORT_EMPLOYEE')) {
-        throw new Error('Support employees cannot use keys directly');
+        throw new Error('Support employees cannot use wallet directly');
       }
 
       // Generate unique warranty key
       const warrantyKey = `WK_${Date.now()}_${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-      // Update retailer's key count
+      // Update retailer's wallet balance
       await User.updateOne(
         { userId: retailerId },
         {
           $inc: {
-            'keyAllocation.usedKeys': 1,
-            'keyAllocation.remainingKeys': -1
+            'walletBalance.usedAmount': premiumAmount,
+            'walletBalance.remainingAmount': -premiumAmount,
+            'eWarrantyStats.totalWarranties': 1,
+            'eWarrantyStats.activeWarranties': 1
           }
         }
       );
 
-      // Create key usage record
-      const keyRecord = new KeyManagement({
-        keyId: `KEY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      // Create wallet usage record
+      const walletRecord = new WalletManagement({
+        transactionId: `TXN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         companyId,
-        keyType: 'USAGE',
+        transactionType: 'WARRANTY_USAGE',
         fromUserId: null,
         toUserId: retailerId,
-        keyCount: 1,
+        amount: premiumAmount,
         isActive: true,
-        isRestrictedOperation: true
+        isRestrictedOperation: true,
+        warrantyKey,
+        customerDetails: {
+          customerId: customerData.customerId,
+          customerName: customerData.customerDetails.name,
+          productModel: customerData.productDetails.modelName,
+          premiumAmount
+        }
       });
 
-      await keyRecord.save();
+      await walletRecord.save();
 
       // Create audit log
-      await CompanyService.createAuditLog(retailerId, 'KEY_USAGE', 'KEY', keyRecord.keyId, null, {
+      await CompanyService.createAuditLog(retailerId, 'WALLET_WARRANTY_USAGE', 'WALLET', walletRecord.transactionId, null, {
         retailerId,
-        warrantyKey
+        warrantyKey,
+        premiumAmount,
+        customerId: customerData.customerId
       }, companyId);
 
-      return warrantyKey;
+      return { warrantyKey, walletRecord };
     } catch (error) {
-      throw new Error(`Error using key: ${error.message}`);
+      throw new Error(`Error using wallet for warranty: ${error.message}`);
     }
   }
 
-  // Get key allocation history for a user (support employees can view if permitted)
-  static async getKeyHistory(userId, companyId, requestingUserId = null) {
+  // Get wallet transaction history
+  static async getWalletHistory(userId, companyId, filters = {}) {
     try {
-      // If requesting user is specified, check permissions
-      if (requestingUserId && requestingUserId !== userId) {
-        const hasPermission = await HierarchyService.checkUserPermission(requestingUserId, userId, 'VIEW');
-        if (!hasPermission) {
-          throw new Error('No permission to view key history for this user');
-        }
-
-        // Additional check for support employees
-        const requestingUser = await User.findOne({ userId: requestingUserId });
-        if (requestingUser?.userType.includes('SUPPORT_EMPLOYEE')) {
-          if (!requestingUser.supportPermissions.effectivePermissions.canViewKeyHistory) {
-            throw new Error('Support employee does not have permission to view key history');
-          }
-        }
-      }
-
-      const history = await KeyManagement.find({
+      const query = {
+        companyId,
         $or: [
           { fromUserId: userId },
           { toUserId: userId }
-        ],
-        companyId
-      }).sort({ transactionDate: -1 });
+        ]
+      };
+
+      if (filters.transactionType) {
+        query.transactionType = filters.transactionType;
+      }
+
+      if (filters.dateFrom || filters.dateTo) {
+        query.transactionDate = {};
+        if (filters.dateFrom) query.transactionDate.$gte = new Date(filters.dateFrom);
+        if (filters.dateTo) query.transactionDate.$lte = new Date(filters.dateTo);
+      }
+
+      const history = await WalletManagement.find(query)
+        .populate('fromUserId', 'name userType')
+        .populate('toUserId', 'name userType')
+        .sort({ transactionDate: -1 })
+        .limit(filters.limit || 50);
 
       return history;
     } catch (error) {
-      throw new Error(`Error getting key history: ${error.message}`);
+      throw new Error(`Error getting wallet history: ${error.message}`);
+    }
+  }
+
+  // Get wallet balance summary
+  static async getWalletSummary(userId) {
+    try {
+      const user = await User.findOne({ userId }).select('walletBalance eWarrantyStats');
+      if (!user) throw new Error('User not found');
+
+      const summary = {
+        walletBalance: user.walletBalance,
+        eWarrantyStats: user.eWarrantyStats,
+        recentTransactions: await this.getWalletHistory(userId, user.companyId, { limit: 10 })
+      };
+
+      return summary;
+    } catch (error) {
+      throw new Error(`Error getting wallet summary: ${error.message}`);
+    }
+  }
+
+  // Get retailer's customer statistics
+  static async getRetailerCustomerStats(retailerId, companyId) {
+    try {
+      const retailer = await User.findOne({ userId: retailerId });
+      if (!retailer) throw new Error('Retailer not found');
+
+      // Get customer count from database
+      const customerCount = await Customer.countDocuments({
+        retailerId,
+        companyId,
+        isActive: true
+      });
+
+      // Get active warranties count
+      const activeWarranties = await Customer.countDocuments({
+        retailerId,
+        companyId,
+        isActive: true,
+        'warrantyDetails.expiryDate': { $gte: new Date() }
+      });
+
+      // Get expired warranties count
+      const expiredWarranties = await Customer.countDocuments({
+        retailerId,
+        companyId,
+        isActive: true,
+        'warrantyDetails.expiryDate': { $lt: new Date() }
+      });
+
+      // Update user's eWarrantyStats if they don't match
+      if (retailer.eWarrantyStats.totalWarranties !== customerCount) {
+        await User.updateOne(
+          { userId: retailerId },
+          {
+            $set: {
+              'eWarrantyStats.totalWarranties': customerCount,
+              'eWarrantyStats.activeWarranties': activeWarranties,
+              'eWarrantyStats.expiredWarranties': expiredWarranties
+            }
+          }
+        );
+      }
+
+      return {
+        retailerId,
+        retailerName: retailer.name,
+        walletBalance: retailer.walletBalance,
+        customerStats: {
+          totalCustomers: customerCount,
+          activeWarranties,
+          expiredWarranties
+        },
+        eWarrantyStats: {
+          totalWarranties: customerCount,
+          activeWarranties,
+          expiredWarranties
+        }
+      };
+    } catch (error) {
+      throw new Error(`Error getting retailer customer stats: ${error.message}`);
+    }
+  }
+
+  // Update warranty status (when warranty expires or is claimed)
+  static async updateWarrantyStatus(customerId, status, companyId) {
+    try {
+      const customer = await Customer.findOne({ customerId, companyId });
+      if (!customer) throw new Error('Customer not found');
+
+      const retailerId = customer.retailerId;
+      
+      if (status === 'EXPIRED') {
+        await User.updateOne(
+          { userId: retailerId },
+          {
+            $inc: {
+              'eWarrantyStats.activeWarranties': -1,
+              'eWarrantyStats.expiredWarranties': 1
+            }
+          }
+        );
+      } else if (status === 'CLAIMED') {
+        await User.updateOne(
+          { userId: retailerId },
+          {
+            $inc: {
+              'eWarrantyStats.activeWarranties': -1,
+              'eWarrantyStats.claimedWarranties': 1
+            }
+          }
+        );
+      }
+
+      return true;
+    } catch (error) {
+      throw new Error(`Error updating warranty status: ${error.message}`);
     }
   }
 }
@@ -796,7 +931,13 @@ class CustomerService {
       }
 
       // Use a key to create warranty (retailer's key, not support employee's)
-      const warrantyKey = await KeyManagementService.useKey(retailerId, companyId);
+      const premiumAmount = customerData.warrantyDetails.premiumAmount;
+      const { warrantyKey, walletRecord } = await WalletManagementService.useWalletForWarranty(
+        retailerId,
+        premiumAmount,
+        companyId,
+        customerData
+      );
 
       // Get retailer's hierarchy
       const retailerHierarchy = await UserHierarchy.findOne({ userId: retailerId });
@@ -855,14 +996,26 @@ class CustomerService {
   }
 
   // Get customers accessible to a user based on hierarchy and permissions
-  static async getAccessibleCustomers(userId, companyId, userType, filters = {}) {
+  static async getAccessibleCustomers(userId, companyId, userType, filters = {},page = 1, limit = 10, search = '') {
     try {
       const user = await User.findOne({ userId });
       if (!user) return [];
       let customers = []
-
+      let query = {};
+      if (search) {
+       query.$or = [
+         { name: { $regex: search, $options: 'i' } },
+         { email: { $regex: search, $options: 'i' } }
+       ];
+     }
       if(userType == "RETAILER"){
-        customers = await Customer.find({retailerId: userId, companyId})
+        query.retailerId = userId;
+        query.companyId = companyId;
+        query = {
+          ...query,
+          ...filters
+        };
+        customers = await Customer.find(query).sort({ 'dates.createdDate': -1 }).skip((page - 1) * limit).limit(limit);
       }else{
           let hierarchy = null;
           let accessibleUserIds = [];
@@ -893,8 +1046,9 @@ class CustomerService {
         }
 
         // Build query
-        const query = {
-          retailerId: { $in: accessibleUserIds },
+        query.retailerId = { $in: accessibleUserIds };
+        query = {
+          ...query,
           ...filters
         };
 
@@ -902,7 +1056,7 @@ class CustomerService {
         if (!user.userType.startsWith('MAIN_') || user.userType.includes('SUPPORT_EMPLOYEE')) {
           query.companyId = companyId;
         }
-        customers = await Customer.find(query).sort({ 'dates.createdDate': -1 });
+        customers = await Customer.find(query).sort({ 'dates.createdDate': -1 }).skip((page - 1) * limit).limit(limit);
       }
       return customers;
     } catch (error) {
@@ -1141,7 +1295,7 @@ module.exports = {
   SupportPermissionService,
   SupportAssignmentService,
   HierarchyService,
-  KeyManagementService,
+  WalletManagementService,
   CustomerService,
   ValidationService
 };
