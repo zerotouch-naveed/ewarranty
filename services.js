@@ -788,7 +788,7 @@ class WalletManagementService {
   // Get wallet balance summary
   static async getWalletSummary(userId) {
     try {
-      const user = await User.findOne({ userId }).select('walletBalance eWarrantyStats');
+      const user = await User.findOne({ userId }).select('walletBalance eWarrantyStats companyId');
       if (!user) throw new Error('User not found');
 
       const summary = {

@@ -214,11 +214,25 @@ async function authRoutes(fastify, options) {
                       userType: { type: "string" },
                       companyId: { type: "string" },
                       lastLoginAt: { type: "string", format: "date-time" },
+                      walletBalance: {
+                        type: "object",
+                        properties: {
+                          totalAmount: {type: "string"},
+                          usedAmount: {type: "string"},
+                          remainingAmount: {type: "string"}
+                        }
+                      },
+                      settings: {
+                        type: "object",
+                        properties: {
+                          currency: { type: "string" },
+                        },
+                      },
                     },
                     additionalProperties: false, // Optional: blocks extra fields not listed
                   },
+                  createdAt: { type: "string", format: "date-time" },
                   token: { type: "string" },
-                  refreshToken: { type: "string" },
                 },
               },
             },
