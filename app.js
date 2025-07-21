@@ -90,7 +90,7 @@ const start = async () => {
       await fastify.register(require('@fastify/swagger-ui'), {
         routePrefix: '/docs',
         uiConfig: {
-          url: 'https://ewarranty-oefb.vercel.app/docs/json', // adjust if needed
+          url: 'https://ewarranty-oefb.vercel.app/docs', // adjust if needed
           docExpansion: 'list',
           deepLinking: false
         },
