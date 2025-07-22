@@ -753,37 +753,58 @@ class WalletManagementService {
   }
 
   // Get wallet transaction history
-  static async getWalletHistory(userId, companyId, filters = {}) {
-    try {
-      const query = {
-        companyId,
-        $or: [
-          { fromUserId: userId },
-          { toUserId: userId }
-        ]
-      };
+static async getWalletHistory(userId, companyId, filters = {}) {
+  try {
+    const query = {
+      companyId,
+      $or: [
+        { fromUserId: userId },
+        { toUserId: userId }
+      ]
+    };
 
-      if (filters.transactionType) {
-        query.transactionType = filters.transactionType;
-      }
-
-      if (filters.dateFrom || filters.dateTo) {
-        query.transactionDate = {};
-        if (filters.dateFrom) query.transactionDate.$gte = new Date(filters.dateFrom);
-        if (filters.dateTo) query.transactionDate.$lte = new Date(filters.dateTo);
-      }
-
-      const history = await WalletManagement.find(query)
-        .populate('fromUserId', 'name userType')
-        .populate('toUserId', 'name userType')
-        .sort({ transactionDate: -1 })
-        .limit(filters.limit || 50);
-
-      return history;
-    } catch (error) {
-      throw new Error(`Error getting wallet history: ${error.message}`);
+    if (filters.transactionType) {
+      query.transactionType = filters.transactionType;
     }
+
+    if (filters.dateFrom || filters.dateTo) {
+      query.transactionDate = {};
+      if (filters.dateFrom) query.transactionDate.$gte = new Date(filters.dateFrom);
+      if (filters.dateTo) query.transactionDate.$lte = new Date(filters.dateTo);
+    }
+
+    // Step 1: Fetch transactions
+    const history = await WalletManagement.find(query)
+      .sort({ transactionDate: -1 })
+      .limit(filters.limit || 50)
+      .lean(); // Get plain objects
+
+    // Step 2: Extract unique userIds
+    const userIds = new Set();
+    history.forEach(tx => {
+      if (tx.fromUserId) userIds.add(tx.fromUserId);
+      if (tx.toUserId) userIds.add(tx.toUserId);
+    });
+
+    // Step 3: Fetch relevant users by userId
+    const users = await User.find({ userId: { $in: Array.from(userIds) } }, 'userId name userType').lean();
+    const userMap = {};
+    users.forEach(u => {
+      userMap[u.userId] = u;
+    });
+
+    // Step 4: Attach fromUser / toUser objects
+    const enrichedHistory = history.map(tx => ({
+      ...tx,
+      fromUser: userMap[tx.fromUserId] || null,
+      toUser: userMap[tx.toUserId] || null
+    }));
+
+    return enrichedHistory;
+  } catch (error) {
+    throw new Error(`Error getting wallet history: ${error.message}`);
   }
+}
 
   // Get wallet balance summary
   static async getWalletSummary(userId) {
