@@ -1,5 +1,5 @@
 const { authenticate } = require('../middleware/auth');
-const { WalletManagementService  } = require('../services');
+const { HierarchyService, WalletManagementService  } = require('../services');
 const { catchAsync } = require('../middleware/errorHandler');
 
 async function walletRoutes(fastify, options) {
