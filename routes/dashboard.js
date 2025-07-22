@@ -75,12 +75,16 @@ async function dashboardRoutes(fastify, options) {
       try {
         const { userId } = request.user;
 
-        const user = await User.findOne({ userId }).select("walletBalance");
-        const walletBalance = user?.walletBalance || 0;
+        const user = await User.findOne({ userId });
+        console.log("US: ",user);
+        
+        const walletBalance = user?.walletBalance;
+        const eWarrantyStats = user?.eWarrantyStats;
 
         const totalCustomersCount = await Customer.countDocuments({
           retailerId: userId,
         });
+
 
         const lastAddedUsersRaw = await Customer.find({ retailerId: userId })
           .sort({ "dates.createdDate": -1 })
@@ -110,6 +114,7 @@ async function dashboardRoutes(fastify, options) {
           success: true,
           walletBalance,
           totalCustomersCount,
+          eWarrantyStats,
           customers: lastAddedUsers,
         });
       } catch (error) {
