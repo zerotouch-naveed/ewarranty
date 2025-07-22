@@ -17,8 +17,8 @@ async function dashboardRoutes(fastify, options) {
     catchAsync(async (request, reply) => {
       const { companyId, userId, userType } = request.user;
 
-      const user = await User.findOne({ userId }).select("keyAllocation");
-      const keyAllocation = user?.keyAllocation;
+      const user = await User.findOne({ userId }).select("walletBalance");
+      const walletBalance = user?.walletBalance;
 
       const users = (await HierarchyService.getManageableUsers(userId)) || [];
 
@@ -54,10 +54,71 @@ async function dashboardRoutes(fastify, options) {
         success: true,
         userTypeCount,
         lastAddedUsers,
-        keyAllocation,
+        walletBalance,
         totalCustomersCount: customers.length,
       });
     })
+  );
+
+  fastify.get(
+    "/retailer-stats",
+    {
+      preHandler: [authenticate],
+      schema: {
+        description: "Get Retailer dashboard statistics",
+        tags: ["Dashboard"],
+        security: [{ Bearer: [] }],
+      },
+    },
+
+    async (request, reply) => {
+      try {
+        const { userId } = request.user;
+
+        const user = await User.findOne({ userId }).select("walletBalance");
+        const walletBalance = user?.walletBalance || 0;
+
+        const totalCustomersCount = await Customer.countDocuments({
+          retailerId: userId,
+        });
+
+        const lastAddedUsersRaw = await Customer.find({ retailerId: userId })
+          .sort({ "dates.createdDate": -1 })
+          .limit(10)
+          .select({
+            "customerDetails.name": 1,
+            "productDetails.modelName": 1,
+            "productDetails.category": 1,
+            "warrantyDetails.warrantyPeriod": 1,
+            "warrantyDetails.premiumAmount": 1,
+            "dates.createdDate": 1,
+            warrantyKey: 1,
+          })
+          .lean();
+
+        const lastAddedUsers = lastAddedUsersRaw.map((customer) => ({
+          customerName: customer.customerDetails?.name || "",
+          modelName: customer.productDetails?.modelName || "",
+          warrantyPeriod: customer.warrantyDetails?.warrantyPeriod || "",
+          premiumAmount: customer.warrantyDetails?.premiumAmount || "",
+          createdDate: customer.dates?.createdDate || "",
+          warrantyKey: customer.warrantyKey || "",
+          category: customer.productDetails?.category || "",
+        }));
+
+        return reply.send({
+          success: true,
+          walletBalance,
+          totalCustomersCount,
+          customers: lastAddedUsers,
+        });
+      } catch (error) {
+        request.log.error(error);
+        return reply
+          .status(500)
+          .send({ success: false, error: "Internal Server Error" });
+      }
+    }
   );
 }
 
