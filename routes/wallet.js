@@ -38,19 +38,44 @@ async function walletRoutes(fastify, options) {
   }));
 
   // Get Key History
-  fastify.get('/history', {
+  fastify.post('/history', {
     preHandler: [authenticate],
     schema: {
       description: 'Get key allocation history',
       tags: ['Key Management'],
-      security: [{ Bearer: [] }]
+      security: [{ Bearer: [] }],
+      body: {
+         type: 'object',
+         required: ['userId'],
+         properties: {
+           userId: { type: 'string' }
+         }
+       },
     }
   }, catchAsync(async (request, reply) => {
+    const { userId } = request.body;
+    if (!userId) {
+      return reply.code(400).send({
+        success: false,
+        message: 'Invalid User ID'
+      });
+    }
+    if(request.user.userId !== userId){
+      const isAllowed = await HierarchyService.isAncestor(
+        request.user.userId,
+        userId
+      );
+      if (!isAllowed) {
+        return reply.code(403).send({
+          success: false,
+          message: 'Access denied'
+        });
+      }
+    }
     const history = await WalletManagementService.getWalletHistory(
-      request.user.userId,
+      userId,
       request.user.companyId
     );
-    
     return reply.send({
       success: true,
       data: { history }
