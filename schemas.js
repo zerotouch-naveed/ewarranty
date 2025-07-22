@@ -118,332 +118,102 @@ const supportPermissionSchema = new Schema({
   },
   permissions: {
     // Customer/User related permissions
-    canViewCustomers: {
-      type: Boolean,
-      default: false
-    },
-    canCreateCustomers: {
-      type: Boolean,
-      default: false
-    },
-    canEditCustomers: {
-      type: Boolean,
-      default: false
-    },
-    canDeleteCustomers: {
-      type: Boolean,
-      default: false
-    },
-    canViewUsers: {
-      type: Boolean,
-      default: false
-    },
-    canCreateUsers: {
-      type: Boolean,
-      default: false
-    },
-    canEditUsers: {
-      type: Boolean,
-      default: false
-    },
-    canDeleteUsers: {
-      type: Boolean,
-      default: false
-    },
+    canViewCustomers: { type: Boolean, default: false },
+    canCreateCustomers: { type: Boolean, default: false },
+    canEditCustomers: { type: Boolean, default: false },
+    canDeleteCustomers: { type: Boolean, default: false },
+    canViewUsers: { type: Boolean, default: false },
+    canCreateUsers: { type: Boolean, default: false },
+    canEditUsers: { type: Boolean, default: false },
+    canDeleteUsers: { type: Boolean, default: false },
     
     // Company related permissions
-    canViewCompanyData: {
-      type: Boolean,
-      default: false
-    },
-    canEditCompanySettings: {
-      type: Boolean,
-      default: false
-    },
+    canViewCompanyData: { type: Boolean, default: false },
+    canEditCompanySettings: { type: Boolean, default: false },
     
     // Claims and warranty permissions
-    canViewClaims: {
-      type: Boolean,
-      default: false
-    },
-    canProcessClaims: {
-      type: Boolean,
-      default: false
-    },
-    canViewWarrantyPlans: {
-      type: Boolean,
-      default: false
-    },
-    canEditWarrantyPlans: {
-      type: Boolean,
-      default: false
-    },
+    canViewClaims: { type: Boolean, default: false },
+    canProcessClaims: { type: Boolean, default: false },
+    canViewWarrantyPlans: { type: Boolean, default: false },
+    canEditWarrantyPlans: { type: Boolean, default: false },
     
     // Reports and analytics
-    canViewReports: {
-      type: Boolean,
-      default: false
-    },
-    canExportData: {
-      type: Boolean,
-      default: false
-    },
+    canViewReports: { type: Boolean, default: false },
+    canExportData: { type: Boolean, default: false },
     
     // Wallet related permissions (NEVER allowed for support employees)
-    canTransferWallet: {
-      type: Boolean,
-      default: false,
-      immutable: true
-    },
-    canAllocateWallet: {
-      type: Boolean,
-      default: false,
-      immutable: true
-    },
-    canRevokeWallet: {
-      type: Boolean,
-      default: false,
-      immutable: true
-    },
-    canViewWalletHistory: {
-      type: Boolean,
-      default: false
-    },
+    canTransferWallet: { type: Boolean, default: false, immutable: true },
+    canAllocateWallet: { type: Boolean, default: false, immutable: true },
+    canRevokeWallet: { type: Boolean, default: false, immutable: true },
+    canViewWalletHistory: { type: Boolean, default: false },
     
     // Hierarchy limitations
-    canAccessCrossCompany: {
-      type: Boolean,
-      default: false // Only main company support can access white-labels if true
-    },
-    hierarchyLevelAccess: {
-      type: Number,
-      default: 0 // 0 = only same level, 1 = one level down, etc.
-    }
+    canAccessCrossCompany: { type: Boolean, default: false },
+    hierarchyLevelAccess: { type: Number, default: 0 }
   },
-  applicableUserTypes: [{
-    type: String,
-    enum: ['SUPPORT_EMPLOYEE']
-  }],
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  createdBy: {
-    type: String,
-    ref: 'User',
-    required: true
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  }
+  isActive: { type: Boolean, default: true },
+  createdBy: { type: String, ref: 'User', required: true },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
 // 3. User Schema (All types of users)
 const userSchema = new Schema({
-  userId: {
-    type: String,
-    required: true,
-    unique: true,
-    index: true
-  },
-  companyId: {
-    type: String,
-    required: true,
-    ref: 'Company'
-  },
+  userId: { type: String, required: true, unique: true, index: true },
+  companyId: { type: String, required: true, ref: 'Company' },
   userType: {
     type: String,
     required: true,
     enum: [
       // Main company user types
-      'MAIN_OWNER', 'MAIN_EMPLOYEE', 'MAIN_SUPPORT_EMPLOYEE',
-      // White-label user types
-      'WHITELABEL_OWNER', 'WHITELABEL_EMPLOYEE', 'WHITELABEL_SUPPORT_EMPLOYEE',
-      // Legacy sales hierarchy (for retailers/distributors)
+      'MAIN_OWNER', 'MAIN_EMPLOYEE', 'SUPPORT_EMPLOYEE',
+      // White-label user types  
+      'WHITELABEL_OWNER', 'WHITELABEL_EMPLOYEE',
+      // Legacy sales hierarchy
       'TSM', 'ASM', 'SALES_EXECUTIVE', 'SUPER_DISTRIBUTOR', 'DISTRIBUTOR', 
       'NATIONAL_DISTRIBUTOR', 'MINI_DISTRIBUTOR', 'RETAILER'
     ],
     index: true
   },
-  name: {
-    type: String,
-    required: true,
-    trim: true
-  },
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true
-  },
-  phone: {
-    type: String,
-    required: true
-  },
-  alternatePhone: {
-    type: String,
-    default: null
-  },
-  password: {
-    type: String,
-    required: true
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  parentUserId: {
-    type: String,
-    ref: 'User',
-    default: null,
-    index: true
-  },
-  hierarchyLevel: {
-    type: Number,
-    required: true,
-    default: 0
-  },
+  name: { type: String, required: true, trim: true },
+  email: { type: String, required: true, unique: true, lowercase: true },
+  phone: { type: String, required: true },
+  alternatePhone: { type: String, default: null },
+  password: { type: String, required: true },
+  isActive: { type: Boolean, default: true },
+  parentUserId: { type: String, ref: 'User', default: null, index: true },
+  hierarchyLevel: { type: Number, required: true, default: 0 },
   address: {
     street: String,
-    city: String,
+    city: String, 
     state: String,
     country: String,
     zipCode: String
   },
   walletBalance: {
-    totalAmount: {
-      type: Number,
-      default: 0
-    },
-    usedAmount: {
-      type: Number,
-      default: 0
-    },
-    remainingAmount: {
-      type: Number,
-      default: 0
-    }
+    totalAmount: { type: Number, default: 0 },
+    usedAmount: { type: Number, default: 0 },
+    remainingAmount: { type: Number, default: 0 }
   },
-  // NEW: E-warranty statistics tracking
   eWarrantyStats: {
-    totalWarranties: {
-      type: Number,
-      default: 0
-    },
-    activeWarranties: {
-      type: Number,
-      default: 0
-    },
-    expiredWarranties: {
-      type: Number,
-      default: 0
-    },
-    claimedWarranties: {
-      type: Number,
-      default: 0
-    },
-    totalPremiumCollected: {
-      type: Number,
-      default: 0
-    },
-    lastWarrantyDate: {
-      type: Date,
-      default: null
-    }
-  },
-  // Support employee specific permissions
-  supportPermissions: {
-    permissionSetId: {
-      type: String,
-      ref: 'SupportPermission',
-      default: null // Only set for support employees
-    },
-    assignedBy: {
-      type: String,
-      ref: 'User',
-      default: null
-    },
-    assignedAt: {
-      type: Date,
-      default: null
-    },
-    // Quick access permissions (duplicated from permission set for performance)
-    effectivePermissions: {
-      canViewCustomers: { type: Boolean, default: false },
-      canCreateCustomers: { type: Boolean, default: false },
-      canEditCustomers: { type: Boolean, default: false },
-      canDeleteCustomers: { type: Boolean, default: false },
-      canViewUsers: { type: Boolean, default: false },
-      canCreateUsers: { type: Boolean, default: false },
-      canEditUsers: { type: Boolean, default: false },
-      canDeleteUsers: { type: Boolean, default: false },
-      canViewCompanyData: { type: Boolean, default: false },
-      canEditCompanySettings: { type: Boolean, default: false },
-      canViewClaims: { type: Boolean, default: false },
-      canProcessClaims: { type: Boolean, default: false },
-      canViewWarrantyPlans: { type: Boolean, default: false },
-      canEditWarrantyPlans: { type: Boolean, default: false },
-      canViewReports: { type: Boolean, default: false },
-      canExportData: { type: Boolean, default: false },
-      canViewKeyHistory: { type: Boolean, default: false },
-      canAccessCrossCompany: { type: Boolean, default: false },
-      hierarchyLevelAccess: { type: Number, default: 0 }
-    }
+    totalWarranties: { type: Number, default: 0 },
+    activeWarranties: { type: Number, default: 0 },
+    expiredWarranties: { type: Number, default: 0 },
+    claimedWarranties: { type: Number, default: 0 },
+    totalPremiumCollected: { type: Number, default: 0 },
+    lastWarrantyDate: { type: Date, default: null }
   },
   // Traditional permissions for non-support employees
   permissions: {
-    canCreateUser: {
-      type: Boolean,
-      default: true
-    },
-    canEditUser: {
-      type: Boolean,
-      default: true
-    },
-    canViewReports: {
-      type: Boolean,
-      default: true
-    },
-    canManageKeys: {
-      type: Boolean,
-      default: true
-    }
+    canCreateUser: { type: Boolean, default: true },
+    canEditUser: { type: Boolean, default: true },
+    canViewReports: { type: Boolean, default: true },
+    canManageKeys: { type: Boolean, default: true }
   },
-  // Assignment tracking for support employees
-  assignedCompanies: [{
-    companyId: {
-      type: String,
-      ref: 'Company'
-    },
-    companyName: String,
-    assignedAt: Date,
-    assignedBy: {
-      type: String,
-      ref: 'User'
-    }
-  }],
-  createdBy: {
-    type: String,
-    ref: 'User',
-    default: null
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
-  },
-  lastLoginAt: {
-    type: Date,
-    default: null
-  }
+  createdBy: { type: String, ref: 'User', default: null },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  lastLoginAt: { type: Date, default: null }
 });
 
 // 4. User Hierarchy Schema (Updated for new user types)
@@ -494,7 +264,97 @@ const userHierarchySchema = new Schema({
   }
 });
 
-// 5. Support Assignment Schema (Tracks which support employees are assigned to which companies/users)
+// 3. NEW: Support Employee Assignment Schema (Combines assignment + permissions)
+const supportEmployeeAssignmentSchema = new Schema({
+  assignmentId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true
+  },
+  supportEmployeeId: {
+    type: String,
+    required: true,
+    ref: 'User',
+    index: true
+  },
+  permissionSetId: {
+    type: String,
+    required: true,
+    ref: 'SupportPermission'
+  },
+  assignedBy: {
+    type: String,
+    required: true,
+    ref: 'User'
+  },
+  
+  // Assignment targets
+  assignmentType: {
+    type: String,
+    required: true,
+    enum: ['COMPANY', 'USER', 'HIERARCHY', 'MULTIPLE_COMPANIES']
+  },
+  
+  // Target assignments
+  assignedCompanies: [{
+    companyId: { type: String, ref: 'Company' },
+    companyName: String,
+    accessLevel: {
+      type: String,
+      enum: ['FULL', 'LIMITED', 'READ_ONLY'],
+      default: 'LIMITED'
+    }
+  }],
+  
+  assignedUsers: [{
+    userId: { type: String, ref: 'User' },
+    userName: String,
+    userType: String,
+    accessLevel: {
+      type: String,
+      enum: ['FULL', 'LIMITED', 'READ_ONLY'], 
+      default: 'LIMITED'
+    }
+  }],
+  
+  hierarchyRestrictions: {
+    maxLevel: { type: Number, default: 0 },
+    allowedUserTypes: [String],
+    restrictToParentHierarchy: { type: Boolean, default: true }
+  },
+  
+  // Quick access permissions (cached from permission set)
+  effectivePermissions: {
+    canViewCustomers: { type: Boolean, default: false },
+    canCreateCustomers: { type: Boolean, default: false },
+    canEditCustomers: { type: Boolean, default: false },
+    canDeleteCustomers: { type: Boolean, default: false },
+    canViewUsers: { type: Boolean, default: false },
+    canCreateUsers: { type: Boolean, default: false },
+    canEditUsers: { type: Boolean, default: false },
+    canDeleteUsers: { type: Boolean, default: false },
+    canViewCompanyData: { type: Boolean, default: false },
+    canEditCompanySettings: { type: Boolean, default: false },
+    canViewClaims: { type: Boolean, default: false },
+    canProcessClaims: { type: Boolean, default: false },
+    canViewWarrantyPlans: { type: Boolean, default: false },
+    canEditWarrantyPlans: { type: Boolean, default: false },
+    canViewReports: { type: Boolean, default: false },
+    canExportData: { type: Boolean, default: false },
+    canViewWalletHistory: { type: Boolean, default: false },
+    canAccessCrossCompany: { type: Boolean, default: false },
+    hierarchyLevelAccess: { type: Number, default: 0 }
+  },
+  
+  isActive: { type: Boolean, default: true },
+  assignedAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, default: null },
+  lastSyncedAt: { type: Date, default: Date.now }, // When permissions were last synced
+  notes: { type: String, default: null }
+});
+
+// 4. Updated Support Assignment Schema (Simplified - just basic assignment tracking)
 const supportAssignmentSchema = new Schema({
   assignmentId: {
     type: String,
@@ -518,43 +378,18 @@ const supportAssignmentSchema = new Schema({
     required: true,
     enum: ['COMPANY', 'USER', 'HIERARCHY']
   },
-  // What/who is assigned
-  targetCompanyId: {
-    type: String,
-    ref: 'Company',
-    default: null
-  },
-  targetUserId: {
-    type: String,
-    ref: 'User',
-    default: null
-  },
-  targetHierarchyLevel: {
-    type: Number,
-    default: null
-  },
-  // Access scope
+  targetCompanyId: { type: String, ref: 'Company', default: null },
+  targetUserId: { type: String, ref: 'User', default: null },
+  targetHierarchyLevel: { type: Number, default: null },
   accessScope: {
     type: String,
     enum: ['FULL', 'LIMITED', 'READ_ONLY'],
     default: 'LIMITED'
   },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  assignedAt: {
-    type: Date,
-    default: Date.now
-  },
-  expiresAt: {
-    type: Date,
-    default: null
-  },
-  notes: {
-    type: String,
-    default: null
-  }
+  isActive: { type: Boolean, default: true },
+  assignedAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, default: null },
+  notes: { type: String, default: null }
 });
 
 // NEW: Wallet Management Schema (replaces KeyManagement)
@@ -1111,12 +946,13 @@ companySchema.index({ companyType: 1, parentCompanyId: 1 });
 companySchema.index({ name: 1, isActive: 1 });
 userSchema.index({ companyId: 1, userType: 1 });
 userSchema.index({ parentUserId: 1, isActive: 1 });
-userSchema.index({ userType: 1, 'supportPermissions.permissionSetId': 1 });
 userHierarchySchema.index({ 'hierarchyPath.userId': 1 });
 userHierarchySchema.index({ 'crossCompanyAccess.companyId': 1 });
 supportPermissionSchema.index({ companyId: 1, isActive: 1 });
-supportAssignmentSchema.index({ supportEmployeeId: 1, isActive: 1 });
-supportAssignmentSchema.index({ targetCompanyId: 1, targetUserId: 1 });
+supportEmployeeAssignmentSchema.index({ supportEmployeeId: 1, isActive: 1 });
+supportEmployeeAssignmentSchema.index({ permissionSetId: 1 });
+supportEmployeeAssignmentSchema.index({ 'assignedCompanies.companyId': 1 });
+supportEmployeeAssignmentSchema.index({ 'assignedUsers.userId': 1 });
 customerSchema.index({ companyId: 1, retailerId: 1 });
 customerSchema.index({ 'dates.createdDate': 1 });
 walletManagementSchema.index({ companyId: 1, toUserId: 1 });
@@ -1131,19 +967,26 @@ auditLogSchema.index({ action: 1, entityType: 1 });
 auditLogSchema.index({ 'onBehalfOf.userId': 1 });
 
 // Pre-save middleware
+// Updated pre-save middleware
 userSchema.pre('save', function(next) {
   this.updatedAt = Date.now();
   
   // Ensure support employees can't have wallet permissions
-  if (this.userType.includes('SUPPORT_EMPLOYEE')) {
-    this.permissions.canManageWallet = false;
-    if (this.supportPermissions.effectivePermissions) {
-      this.supportPermissions.effectivePermissions.canTransferWallet = false;
-      this.supportPermissions.effectivePermissions.canAllocateWallet = false;
-      this.supportPermissions.effectivePermissions.canRevokeWallet = false;
-    }
+  if (this.userType === 'SUPPORT_EMPLOYEE') {
+    this.permissions.canManageKeys = false;
+    // Support employees won't have wallet balance
+    this.walletBalance = {
+      totalAmount: 0,
+      usedAmount: 0, 
+      remainingAmount: 0
+    };
   }
   
+  next();
+});
+
+supportEmployeeAssignmentSchema.pre('save', function(next) {
+  this.updatedAt = Date.now();
   next();
 });
 
@@ -1208,6 +1051,7 @@ const WarrantyPlan = mongoose.model('WarrantyPlan', warrantyPlanSchema);
 const Claim = mongoose.model('Claim', claimSchema);
 const AuditLog = mongoose.model('AuditLog', auditLogSchema);
 const Settings = mongoose.model('Settings', settingsSchema);
+const SupportEmployeeAssignment = mongoose.model('SupportEmployeeAssignment', supportEmployeeAssignmentSchema);
 
 module.exports = {
   Company,
@@ -1220,5 +1064,6 @@ module.exports = {
   WarrantyPlan,
   Claim,
   AuditLog,
-  Settings
+  Settings,
+  SupportEmployeeAssignment
 };

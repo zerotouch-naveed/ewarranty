@@ -171,37 +171,38 @@ class SupportPermissionService {
         throw new Error('User, assigner, or permission set not found');
       }
 
-      // Check if user is a support employee
       if (!user.userType.includes('SUPPORT_EMPLOYEE')) {
         throw new Error('Permissions can only be assigned to support employees');
       }
 
-      // Check hierarchy permission
       const canAssign = await this.canAssignPermissions(assignedBy, userId);
       if (!canAssign) {
         throw new Error('No permission to assign permissions to this user');
       }
 
-      // Update user with permission set
-      user.supportPermissions.permissionSetId = permissionSetId;
-      user.supportPermissions.assignedBy = assignedBy;
-      user.supportPermissions.assignedAt = new Date();
-      user.supportPermissions.effectivePermissions = permissionSet.permissions;
+      const assignment = new SupportEmployeeAssignment({
+        assignmentId: `SUP_ASSIGN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        supportEmployeeId: userId,
+        permissionSetId,
+        assignedBy,
+        assignmentType: 'USER',
+        assignedUsers: [{ userId, userName: user.name, userType: user.userType }],
+        effectivePermissions: permissionSet.permissions
+      });
 
-      await user.save();
+      await assignment.save();
 
-      // Create audit log
       await CompanyService.createAuditLog(
         assignedBy,
         'PERMISSION_CHANGE',
         'USER',
         userId,
         null,
-        { permissionSetId, assignedBy },
+        assignment.toObject(),
         assigner.companyId
       );
 
-      return user;
+      return assignment;
     } catch (error) {
       throw new Error(`Error assigning permission: ${error.message}`);
     }
@@ -256,67 +257,37 @@ class SupportPermissionService {
   }
 }
 
+
 // Support Assignment Service
 class SupportAssignmentService {
   
+
+  
   // Assign support employee to company/user/hierarchy
   static async createAssignment(assignmentData, assignedBy) {
-    try {
-      const assigner = await User.findOne({ userId: assignedBy });
-      const supportEmployee = await User.findOne({ userId: assignmentData.supportEmployeeId });
+    const assigner = await User.findOne({ userId: assignedBy });
+    const supportEmployee = await User.findOne({ userId: assignmentData.supportEmployeeId });
+    if (!assigner || !supportEmployee) throw new Error('Invalid assigner or support employee');
 
-      if (!assigner || !supportEmployee) {
-        throw new Error('Assigner or support employee not found');
-      }
+    const permissionSet = await SupportPermission.findOne({ permissionId: assignmentData.permissionSetId });
+    if (!permissionSet) throw new Error('Permission set not found');
 
-      // Verify support employee
-      if (!supportEmployee.userType.includes('SUPPORT_EMPLOYEE')) {
-        throw new Error('Can only assign support employees');
-      }
+    const assignment = new SupportEmployeeAssignment({
+      assignmentId: `SUP_ASSIGN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      supportEmployeeId: assignmentData.supportEmployeeId,
+      permissionSetId: assignmentData.permissionSetId,
+      assignedBy,
+      assignmentType: assignmentData.assignmentType,
+      assignedCompanies: assignmentData.assignedCompanies || [],
+      assignedUsers: assignmentData.assignedUsers || [],
+      hierarchyRestrictions: assignmentData.hierarchyRestrictions || {},
+      effectivePermissions: permissionSet.permissions,
+      notes: assignmentData.notes || null
+    });
 
-      // Check assignment permission
-      const canAssign = await this.canCreateAssignment(assignedBy, assignmentData);
-      if (!canAssign) {
-        throw new Error('No permission to create this assignment');
-      }
-
-      const assignment = new SupportAssignment({
-        assignmentId: `ASSIGN_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        ...assignmentData,
-        assignedBy
-      });
-
-      await assignment.save();
-
-      // Update user's assigned companies if it's a company assignment
-      if (assignmentData.assignmentType === 'COMPANY' && assignmentData.targetCompanyId) {
-        const targetCompany = await Company.findOne({ companyId: assignmentData.targetCompanyId });
-        if (targetCompany) {
-          supportEmployee.assignedCompanies.push({
-            companyId: assignmentData.targetCompanyId,
-            companyName: targetCompany.name,
-            assignedAt: new Date(),
-            assignedBy
-          });
-          await supportEmployee.save();
-        }
-      }
-
-      // Create audit log
-      await CompanyService.createAuditLog(
-        assignedBy,
-        'SUPPORT_ASSIGNMENT',
-        'ASSIGNMENT',
-        assignment.assignmentId,
-        null,
-        assignment.toObject(),
-        assigner.companyId
-      );
-
-      return assignment;
-    } catch (error) {
-      throw new Error(`Error creating assignment: ${error.message}`);
-    }
+    await assignment.save();
+    await CompanyService.createAuditLog(assignedBy, 'SUPPORT_ASSIGNMENT', 'ASSIGNMENT', assignment.assignmentId, null, assignment.toObject(), assigner.companyId);
+    return assignment;
   }
 
   // Check if user can create assignment
@@ -325,43 +296,26 @@ class SupportAssignmentService {
       const assigner = await User.findOne({ userId: assignerId });
       if (!assigner) return false;
 
-      // Only owners and employees can create assignments
-      if (!assigner.userType.includes('OWNER') && !assigner.userType.includes('EMPLOYEE')) {
-        return false;
-      }
-
-      // Main company users can assign to any white-label
-      if (assigner.userType.startsWith('MAIN_')) {
-        return true;
-      }
-
-      // White-label users can only assign within their company
+      if (!assigner.userType.includes('OWNER') && !assigner.userType.includes('EMPLOYEE')) return false;
+      if (assigner.userType.startsWith('MAIN_')) return true;
       if (assigner.userType.startsWith('WHITELABEL_')) {
-        if (assignmentData.targetCompanyId === assigner.companyId) {
-          return true;
-        }
+        return assignmentData.targetCompanyId === assigner.companyId;
       }
-
       return false;
     } catch (error) {
       return false;
     }
   }
 
-  // Get assignments for a support employee
   static async getUserAssignments(supportEmployeeId) {
-    try {
-      return await SupportAssignment.find({
-        supportEmployeeId,
-        isActive: true,
-        $or: [
-          { expiresAt: null },
-          { expiresAt: { $gt: new Date() } }
-        ]
-      }).sort({ assignedAt: -1 });
-    } catch (error) {
-      throw new Error(`Error getting user assignments: ${error.message}`);
-    }
+    return await SupportEmployeeAssignment.find({
+      supportEmployeeId,
+      isActive: true,
+      $or: [
+        { expiresAt: null },
+        { expiresAt: { $gt: new Date() } }
+      ]
+    }).sort({ assignedAt: -1 });
   }
 }
 
@@ -459,46 +413,62 @@ class HierarchyService {
     return false;
   }
 
+  static async getSupportEmployeeManageableUsers(supportUserId) {
+    const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
+    let userIds = new Set();
+
+    for (const assignment of assignments) {
+      if (assignment.assignmentType === 'USER') {
+        assignment.assignedUsers.forEach(u => userIds.add(u.userId));
+      } else if (assignment.assignmentType === 'COMPANY') {
+        const users = await User.find({ companyId: { $in: assignment.assignedCompanies.map(c => c.companyId) } });
+        users.forEach(u => userIds.add(u.userId));
+      } else if (assignment.assignmentType === 'HIERARCHY') {
+        const allUsers = await UserHierarchy.find();
+        const filteredUsers = allUsers.filter(h => h.hierarchyPath.length <= assignment.hierarchyRestrictions.maxLevel);
+        filteredUsers.forEach(u => userIds.add(u.userId));
+      }
+    }
+
+    return await User.find({ userId: { $in: Array.from(userIds) } });
+  }
+
   static async checkSupportEmployeePermission(supportUserId, targetUserId, action) {
     const supportUser = await User.findOne({ userId: supportUserId });
     const targetUser = await User.findOne({ userId: targetUserId });
     if (!supportUser || !targetUser) return false;
 
-    const permissions = supportUser.supportPermissions?.effectivePermissions;
-    if (!permissions) return false;
-
-    const actionMap = {
-      'VIEW': permissions.canViewUsers,
-      'CREATE': permissions.canCreateUsers,
-      'EDIT': permissions.canEditUsers,
-      'DELETE': permissions.canDeleteUsers,
-      'VIEW_CUSTOMERS': permissions.canViewCustomers,
-      'CREATE_CUSTOMERS': permissions.canCreateCustomers,
-      'EDIT_CUSTOMERS': permissions.canEditCustomers,
-      'DELETE_CUSTOMERS': permissions.canDeleteCustomers
-    };
-
-    if (!actionMap[action]) return false;
-
     const assignments = await SupportAssignmentService.getUserAssignments(supportUserId);
+
     for (const assignment of assignments) {
-      if (assignment.assignmentType === 'COMPANY' && assignment.targetCompanyId === targetUser.companyId) {
-        return true;
+      const perms = assignment.effectivePermissions;
+      const actionMap = {
+        'VIEW': perms.canViewUsers,
+        'CREATE': perms.canCreateUsers,
+        'EDIT': perms.canEditUsers,
+        'DELETE': perms.canDeleteUsers,
+        'VIEW_CUSTOMERS': perms.canViewCustomers,
+        'CREATE_CUSTOMERS': perms.canCreateCustomers,
+        'EDIT_CUSTOMERS': perms.canEditCustomers,
+        'DELETE_CUSTOMERS': perms.canDeleteCustomers
+      };
+
+      if (!actionMap[action]) continue;
+
+      if (assignment.assignmentType === 'USER') {
+        if (assignment.assignedUsers.some(u => u.userId === targetUserId)) return true;
       }
-      if (assignment.assignmentType === 'USER' && assignment.targetUserId === targetUserId) {
-        return true;
+
+      if (assignment.assignmentType === 'COMPANY') {
+        if (assignment.assignedCompanies.some(c => c.companyId === targetUser.companyId)) return true;
       }
+
       if (assignment.assignmentType === 'HIERARCHY') {
         const targetHierarchy = await UserHierarchy.findOne({ userId: targetUserId });
-        if (targetHierarchy && targetHierarchy.hierarchyPath.length <= assignment.targetHierarchyLevel) {
+        if (targetHierarchy && targetHierarchy.hierarchyPath.length <= assignment.hierarchyRestrictions.maxLevel) {
           return true;
         }
       }
-    }
-
-    if (supportUser.userType === 'MAIN_SUPPORT_EMPLOYEE' && permissions.canAccessCrossCompany) {
-      const targetCompany = await Company.findOne({ companyId: targetUser.companyId });
-      return targetCompany?.companyType === 'WHITELABEL';
     }
 
     return false;
@@ -1043,12 +1013,11 @@ class CustomerService {
 
         // Support employees have different access logic
         if (user.userType.includes('SUPPORT_EMPLOYEE')) {
-          if (!user.supportPermissions.effectivePermissions.canViewCustomers) {
-            return [];
-          }
-          
-          const manageableUsers = await HierarchyService.getSupportEmployeeManageableUsers(userId);
-          accessibleUserIds = manageableUsers.map(u => u.userId);
+          const assignments = await SupportAssignmentService.getUserAssignments(userId);
+          const hasPermission = assignments.some(a => a.effectivePermissions?.canViewCustomers);
+          if (!hasPermission) return [];
+
+          const manageableUsers = await this.getSupportEmployeeManageableUsers(userId);
         } else {
           // Regular hierarchy access
           hierarchy = await HierarchyService.getManageableUsers(userId);
@@ -1096,10 +1065,11 @@ class CustomerService {
 
       // Support employees need specific permission and assignment
       if (user.userType.includes('SUPPORT_EMPLOYEE')) {
-        if (!user.supportPermissions.effectivePermissions.canViewCustomers) {
-          return false;
-        }
-        return await HierarchyService.checkUserPermission(userId, customer.retailerId, 'VIEW_CUSTOMERS');
+        const assignments = await SupportAssignmentService.getUserAssignments(userId);
+        const hasPermission = assignments.some(a => a.effectivePermissions?.canViewCustomers);
+        if (!hasPermission) return false;
+
+        return await this.checkUserPermission(userId, customer.retailerId, 'VIEW_CUSTOMERS');
       }
 
       // Regular permission check
