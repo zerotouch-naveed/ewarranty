@@ -13,20 +13,20 @@ async function walletRoutes(fastify, options) {
       security: [{ Bearer: [] }],
       body: {
          type: 'object',
-         required: ['toUserId', 'keyCount'],
+         required: ['toUserId', 'amount'],
          properties: {
            toUserId: { type: 'string' },
-           keyCount: { type: 'integer', minimum: 1 }
+           amount: { type: 'integer', minimum: 1 }
          }
        },
     }
   }, catchAsync(async (request, reply) => {
-    const { toUserId, keyCount } = request.body;
+    const { toUserId, amount } = request.body;
     
     const keyRecord = await WalletManagementService.allocateWalletAmount(
       request.user.userId,
       toUserId,
-      keyCount,
+      amount,
       request.user.companyId
     );
 
