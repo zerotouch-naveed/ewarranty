@@ -72,16 +72,10 @@ async function userRoutes(fastify, options) {
     sortOrder
   );
 
-  const usersResponse = users.map(user => {
-    const userObj = user.toObject();
-    delete userObj.password;
-    return userObj;
-  });
-
   return reply.send({
     success: true,
     data: {
-      users: usersResponse,
+      users,
       pagination: {
         currentPage,
         totalPages,
