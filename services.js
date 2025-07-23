@@ -800,7 +800,7 @@ class WalletManagementService {
   }
 
   // Get wallet transaction history
-static async getWalletHistory(userId, companyId, filters = {}) {
+static async getWalletHistory(userId, companyId, filters = {}, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc') {
   try {
     const query = {
       companyId,
@@ -820,11 +820,11 @@ static async getWalletHistory(userId, companyId, filters = {}) {
       if (filters.dateTo) query.transactionDate.$lte = new Date(filters.dateTo);
     }
 
+    let sortQuery = {};
+    sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
     // Step 1: Fetch transactions
-    const history = await WalletManagement.find(query)
-      .sort({ transactionDate: -1 })
-      .limit(filters.limit || 50)
-      .lean(); // Get plain objects
+     const totalData = await WalletManagement.countDocuments(query);
+    const history = await WalletManagement.find(query).sort(sortQuery).skip((page - 1) * limit).limit(limit).lean(); // Get plain objects
 
     // Step 2: Extract unique userIds
     const userIds = new Set();
@@ -847,7 +847,13 @@ static async getWalletHistory(userId, companyId, filters = {}) {
       toUser: userMap[tx.toUserId] || null
     }));
 
-    return enrichedHistory;
+    return {
+      history: enrichedHistory,
+      totalData,
+      currentPage: page,
+      totalPages: Math.ceil(totalData / limit),
+      limit
+    };
   } catch (error) {
     throw new Error(`Error getting wallet history: ${error.message}`);
   }
@@ -858,11 +864,11 @@ static async getWalletHistory(userId, companyId, filters = {}) {
     try {
       const user = await User.findOne({ userId });
       if (!user) throw new Error('User not found');
-
+      let {history} = await this.getWalletHistory(userId, user.companyId)
       const summary = {
         walletBalance: user.walletBalance,
         eWarrantyStats: user.eWarrantyStats,
-        recentTransactions: await this.getWalletHistory(userId, user.companyId, { limit: 10 })
+        recentTransactions: history
       };
 
       return summary;
@@ -1136,7 +1142,7 @@ class CustomerService {
         }
         
       }
-      customers = await Customer.find(query).sort(sortQuery).skip((page - 1) * limit).limit(limit).select(limitedFields);
+      customers = await Customer.find(query).sort(sortQuery).skip((page - 1) * limit).limit(limit).select(limitedFields).lean();
       const totalData = await Customer.countDocuments(query);
       return{
       customers,

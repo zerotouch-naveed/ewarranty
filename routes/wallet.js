@@ -45,15 +45,30 @@ async function walletRoutes(fastify, options) {
       tags: ['Key Management'],
       security: [{ Bearer: [] }],
       body: {
-         type: 'object',
-         required: ['userId'],
-         properties: {
-           userId: { type: 'string' }
-         }
-       },
+        type: 'object',
+        required: ['userId'],
+        properties: {
+          userId: { type: 'string' },
+          page: { type: 'integer', minimum: 1, default: 1 },
+          limit: { type: 'integer', minimum: 1, default: 10 },
+          transactionType: { type: 'string', enum: ['SELF-ALLOCATION','ALLOCATION', 'WARRANTY_USAGE', 'REVOKE', 'REFUND', 'ALL'], default: 'ALL' },
+          startDate: { type: 'string', format: 'date' },
+          endDate: { type: 'string', format: 'date' },
+          sortBy: {
+            type: 'string',
+            enum: ['createdAt', 'amount'],
+            default: 'createdAt'
+          },
+          sortOrder: {
+            type: 'string',
+            enum: ['asc', 'desc'],
+            default: 'desc'
+          }
+        }
+      },
     }
   }, catchAsync(async (request, reply) => {
-    const { userId } = request.body;
+    const { userId, transactionType = 'ALL', startDate, endDate, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = request.body;
     if (!userId) {
       return reply.code(400).send({
         success: false,
@@ -72,13 +87,34 @@ async function walletRoutes(fastify, options) {
         });
       }
     }
-    const history = await WalletManagementService.getWalletHistory(
+    const filters = {};
+    if (transactionType !== 'ALL') filters.transactionType = transactionType;
+    if (startDate && endDate) {
+      filters['createdAt'] = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+    const { history, totalData, currentPage, totalPages } = await WalletManagementService.getWalletHistory(
       userId,
-      request.user.companyId
+      request.user.companyId,
+      filters,
+      page,
+      limit,
+      sortBy,
+      sortOrder
     );
     return reply.send({
       success: true,
-      data: { history }
+      data: { 
+        history,
+        pagination: {
+          currentPage,
+          totalPages,
+          totalData,
+          limit
+        }
+       }
     });
   }));
 
