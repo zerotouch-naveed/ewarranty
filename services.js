@@ -1085,7 +1085,7 @@ class CustomerService {
       } else {
         sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
       }
-      const limitedFields = "warrantyKey customerId status customerDetails.name productDetails.name productDetails.category warrantyDetails.premiumAmount warrantyDetails.warrantyPeriod dates.createdDate isActive notes"
+      const limitedFields = "warrantyKey customerId status customerDetails.name productDetails.modelName productDetails.category warrantyDetails.premiumAmount warrantyDetails.warrantyPeriod dates.createdDate isActive notes"
       if(userType == "RETAILER") {
         query.retailerId = userId;
         query.companyId = companyId;
