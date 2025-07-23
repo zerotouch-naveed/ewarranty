@@ -523,7 +523,7 @@ static async getManageableUsersWithFilters(
     .sort(sortQuery)
     .skip((page - 1) * limit)
     .limit(limit)
-    .select('userId companyId name userType createdAt email phone walletBalance.remainingAmount parentUserId');
+    .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount parentUserId');
 
   return {
     users,
