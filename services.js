@@ -495,16 +495,31 @@ static async getManageableUsersWithFilters(
   sortBy = 'createdAt',
   sortOrder = 'desc'
 ) {
-  const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId }).select('userId');
-  const userIds = hierarchies.map(h => h.userId);
+  const hierarchyUserIds = await UserHierarchy.distinct('userId', {
+    'hierarchyPath.userId': managerUserId
+  });
 
-  let query = { userId: { $in: userIds } };
+  // Build optimized query
+  let query = { 
+    userId: { $in: hierarchyUserIds },
+    ...filters
+  };
 
   if (search) {
-    query.$text = { $search: search };
+    // Check if it's likely an exact match search
+    if (search.includes('@') || /^\+?[\d\s\-\(\)]{10,}$/.test(search) || search.length > 15) {
+      // Use regex for email/phone/specific searches
+      const searchRegex = { $regex: search, $options: 'i' };
+      query.$or = [
+        { email: searchRegex },
+        { phone: searchRegex },
+        { userId: searchRegex }
+      ];
+    } else {
+      // Use text search for general name/address searches
+      query.$text = { $search: search };
+    }
   }
-
-  query = { ...query, ...filters };
 
   // Handle nested sort fields
   let sortQuery = {};
@@ -520,8 +535,8 @@ static async getManageableUsersWithFilters(
   .sort(sortQuery)
   .skip((page - 1) * limit)
   .limit(limit)
-  .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId');
-
+  .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId')
+  .lean();
 
   return {
     users,
