@@ -485,68 +485,81 @@ class HierarchyService {
     return users;
   }
 
+  static async getManageableUsersWithFilters(
+    managerUserId,
+    filters = {},
+    page = 1,
+    limit = 10,
+    search = '',
+    sortBy = 'createdAt',
+    sortOrder = 'desc'
+  ) {
+    const hierarchyUserIds = await UserHierarchy.distinct('userId', {
+      'hierarchyPath.userId': managerUserId
+    });
 
-static async getManageableUsersWithFilters(
-  managerUserId,
-  filters = {},
-  page = 1,
-  limit = 10,
-  search = '',
-  sortBy = 'createdAt',
-  sortOrder = 'desc'
-) {
-  const hierarchyUserIds = await UserHierarchy.distinct('userId', {
-    'hierarchyPath.userId': managerUserId
-  });
+    // Build optimized query
+    let query = { 
+      userId: { $in: hierarchyUserIds },
+      ...filters
+    };
 
-  // Build optimized query
-  let query = { 
-    userId: { $in: hierarchyUserIds },
-    ...filters
-  };
-
-  if (search) {
-    // Check if it's likely an exact match search
-    if (search.includes('@') || /^\+?[\d\s\-\(\)]{10,}$/.test(search) || search.length > 15) {
-      // Use regex for email/phone/specific searches
-      const searchRegex = { $regex: search, $options: 'i' };
-      query.$or = [
-        { email: searchRegex },
-        { phone: searchRegex },
-        { userId: searchRegex }
-      ];
-    } else {
-      // Use text search for general name/address searches
-      query.$text = { $search: search };
+    if (search) {
+      const searchTerm = search.trim();
+      // Create regex for partial matching
+      const searchRegex = { $regex: searchTerm, $options: 'i' };
+      // Different search strategies based on input type
+      if (searchTerm.includes('@')) {
+        // Email search - exact match preferred
+        query.$or = [
+          { email: searchRegex },
+          { userId: searchRegex }
+        ];
+      } else if (/^\+?[\d\s\-\(\)]{10,}$/.test(searchTerm)) {
+        // Phone number search
+        query.$or = [
+          { phone: searchRegex },
+          { alternatePhone: searchRegex }
+        ];
+      } else {
+        // General search - name, userId, address
+        // For better performance, prioritize indexed fields first
+        query.$or = [
+          { name: searchRegex },
+          { userId: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex },
+          { 'address.city': searchRegex },
+          { 'address.state': searchRegex }
+        ];
+      }
     }
+
+    // Handle nested sort fields
+    let sortQuery = {};
+    if (sortBy === 'remainingAmount') {
+      sortQuery['walletBalance.remainingAmount'] = sortOrder === 'asc' ? 1 : -1;
+    } else {
+      sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
+    }
+
+    const totalData = await User.countDocuments(query);
+
+    const users = await User.find(query)
+    .sort(sortQuery)
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId')
+    .lean();
+
+    return {
+      users,
+      totalData,
+      currentPage: page,
+      totalPages: Math.ceil(totalData / limit),
+      limit
+    };
   }
-
-  // Handle nested sort fields
-  let sortQuery = {};
-  if (sortBy === 'remainingAmount') {
-    sortQuery['walletBalance.remainingAmount'] = sortOrder === 'asc' ? 1 : -1;
-  } else {
-    sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
-  }
-
-  const totalData = await User.countDocuments(query);
-
-  const users = await User.find(query)
-  .sort(sortQuery)
-  .skip((page - 1) * limit)
-  .limit(limit)
-  .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId')
-  .lean();
-
-  return {
-    users,
-    totalData,
-    currentPage: page,
-    totalPages: Math.ceil(totalData / limit),
-    limit
-  };
-}
-
 
 }
 
