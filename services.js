@@ -474,7 +474,7 @@ class HierarchyService {
     return false;
   }
 
-  static async getManageableUsers(managerUserId, userType = null) {
+  static async getManageableUsers(managerUserId) {
     const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId });
     const userIds = hierarchies.map(h => h.userId);
     let query = { userId: { $in: userIds } };
@@ -1064,7 +1064,7 @@ class CustomerService {
   }
 
   // Get customers accessible to a user based on hierarchy and permissions
-  static async getAccessibleCustomers(userId, companyId, userType, filters = {},page = 1, limit = 10, search = '') {
+  static async getAccessibleCustomers(userId, companyId, userType, filters = {},page = 1, limit = 10, search = '',sortBy = 'createdDate', sortOrder = 'desc') {
     try {
       const user = await User.findOne({ userId });
       if (!user) return [];
@@ -1075,16 +1075,25 @@ class CustomerService {
          { name: { $regex: search, $options: 'i' } },
          { email: { $regex: search, $options: 'i' } }
        ];
-     }
-      if(userType == "RETAILER"){
+      }
+
+      let sortQuery = {};
+      if (sortBy === 'createdDate') {
+        sortQuery['dates.createdDate'] = sortOrder === 'asc' ? 1 : -1;
+      }else if (sortBy === 'premiumAmount') {
+        sortQuery['warrantyDetails.premiumAmount'] = sortOrder === 'asc' ? 1 : -1;
+      } else {
+        sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
+      }
+      const limitedFields = "warrantyKey customerId status customerDetails.name productDetails.name productDetails.category warrantyDetails.premiumAmount warrantyDetails.warrantyPeriod dates.createdDate isActive notes"
+      if(userType == "RETAILER") {
         query.retailerId = userId;
         query.companyId = companyId;
         query = {
           ...query,
           ...filters
         };
-        customers = await Customer.find(query).sort({ 'dates.createdDate': -1 }).skip((page - 1) * limit).limit(limit);
-      }else{
+      } else {
           let hierarchy = null;
           let accessibleUserIds = [];
 
@@ -1097,11 +1106,13 @@ class CustomerService {
           const manageableUsers = await this.getSupportEmployeeManageableUsers(userId);
         } else {
           // Regular hierarchy access
-          hierarchy = await HierarchyService.getManageableUsers(userId);
-          if (!hierarchy) return [];
+          accessibleUserIds = await UserHierarchy.distinct('userId', { 'hierarchyPath.userId': userId });
+          console.log('hierarchy:', hierarchy);
+          if (!accessibleUserIds) return [];
 
-          accessibleUserIds = hierarchy.map(child => child.userId);
           accessibleUserIds.push(userId);
+          console.log('accessibleUserIds:', accessibleUserIds);
+          console.log('companyId:', companyId);
 
           // Add cross-company access for main company users
           if (user.userType.startsWith('MAIN_')) {
@@ -1123,10 +1134,20 @@ class CustomerService {
         if (!user.userType.startsWith('MAIN_') || user.userType.includes('SUPPORT_EMPLOYEE')) {
           query.companyId = companyId;
         }
-        customers = await Customer.find(query).sort({ 'dates.createdDate': -1 }).skip((page - 1) * limit).limit(limit);
+        
       }
-      return customers;
+      customers = await Customer.find(query).sort(sortQuery).skip((page - 1) * limit).limit(limit).select(limitedFields);
+      const totalData = await Customer.countDocuments(query);
+      return{
+      customers,
+      totalData,
+      currentPage: page,
+      totalPages: Math.ceil(totalData / limit),
+      limit
+    };
     } catch (error) {
+      console.log(error);
+      
       throw new Error(`Error getting accessible customers: ${error.message}`);
     }
   }

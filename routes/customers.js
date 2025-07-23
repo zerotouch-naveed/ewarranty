@@ -121,20 +121,30 @@
       type: 'object',
       required: [],
       properties: {
-        status: { type: 'integer' },
+        search: { type: 'string' },
+        page: { type: 'integer', minimum: 1, default: 1 },
+        limit: { type: 'integer', minimum: 1, default: 10 },
+        status: { type: 'string', enum: ['true', 'false'], default: 'true' },
         startDate: { type: 'string', format: 'date' },
         endDate: { type: 'string', format: 'date' },
-        page: { type: 'integer' },
-        limit: { type: 'integer' },
-        search: { type: 'string' }
+        sortBy: {
+          type: 'string',
+          enum: ['createdDate', 'premiumAmount'],
+          default: 'createdDate'
+        },
+        sortOrder: {
+          type: 'string',
+          enum: ['asc', 'desc'],
+          default: 'desc'
+        }
       }
     },
      }
    }, catchAsync(async (request, reply) => {
-     const { status, startDate, endDate, page = 1, limit = 1, search = '' } = request.body;
+     const { status, startDate, endDate, page = 1, limit = 1, search = '', sortBy = 'createdDate', sortOrder = 'desc' } = request.body;
      
      const filters = {};
-     if (status) filters.status = parseInt(status);
+     if (status) filters.isActive = status;
      if (startDate && endDate) {
        filters['dates.createdDate'] = {
          $gte: new Date(startDate),
@@ -142,19 +152,34 @@
        };
      }
  
-     const customers = await CustomerService.getAccessibleCustomers(
+     const {
+      customers,
+      totalData,
+      currentPage,
+      totalPages
+    } = await CustomerService.getAccessibleCustomers(
        request.user.userId,
        request.user.companyId,
        request.user.userType,
        filters,
        page,
        limit,
-       search
+       search,
+       sortBy,
+      sortOrder
      );
  
      return reply.send({
        success: true,
-       data: { customers }
+       data: {
+        customers,
+        pagination: {
+          currentPage,
+          totalPages,
+          totalData,
+          limit
+        }
+      }
      });
    }));
  
