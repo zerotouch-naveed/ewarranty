@@ -76,8 +76,8 @@ async function dashboardRoutes(fastify, options) {
         const { userId } = request.user;
 
         const user = await User.findOne({ userId });
-        console.log("US: ",user);
-        
+        console.log("US: ", user);
+
         const walletBalance = user?.walletBalance;
         const eWarrantyStats = user?.eWarrantyStats;
 
@@ -85,12 +85,12 @@ async function dashboardRoutes(fastify, options) {
           retailerId: userId,
         });
 
-
         const lastAddedUsersRaw = await Customer.find({ retailerId: userId })
           .sort({ "dates.createdDate": -1 })
           .limit(10)
           .select({
             "customerDetails.name": 1,
+            "notes": 1,
             "productDetails.modelName": 1,
             "productDetails.category": 1,
             "warrantyDetails.warrantyPeriod": 1,
@@ -103,6 +103,7 @@ async function dashboardRoutes(fastify, options) {
         const lastAddedUsers = lastAddedUsersRaw.map((customer) => ({
           customerName: customer.customerDetails?.name || "",
           modelName: customer.productDetails?.modelName || "",
+          notes: customer.notes || "",
           warrantyPeriod: customer.warrantyDetails?.warrantyPeriod || "",
           premiumAmount: customer.warrantyDetails?.premiumAmount || "",
           createdDate: customer.dates?.createdDate || "",
