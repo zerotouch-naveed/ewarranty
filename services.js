@@ -501,13 +501,7 @@ static async getManageableUsersWithFilters(
   let query = { userId: { $in: userIds } };
 
   if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { phone: { $regex: search, $options: 'i' } },
-      { email: { $regex: search, $options: 'i' } },
-      { 'address.city': { $regex: search, $options: 'i' } },
-      { 'address.state': { $regex: search, $options: 'i' } }
-    ];
+    query.$text = { $search: search };
   }
 
   query = { ...query, ...filters };
@@ -523,10 +517,12 @@ static async getManageableUsersWithFilters(
   const totalData = await User.countDocuments(query);
 
   const users = await User.find(query)
-    .sort(sortQuery)
-    .skip((page - 1) * limit)
-    .limit(limit)
-    .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId');
+  .sort(sortQuery)
+  .skip((page - 1) * limit)
+  .limit(limit)
+  .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId').explain('executionStats');
+
+  console.log('Query execution stats:', users.executionStats);
 
   return {
     users,

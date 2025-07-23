@@ -944,8 +944,15 @@ const settingsSchema = new Schema({
 // Additional compound indexes for better query performance
 companySchema.index({ companyType: 1, parentCompanyId: 1 });
 companySchema.index({ name: 1, isActive: 1 });
-userSchema.index({ companyId: 1, userType: 1 });
-userSchema.index({ parentUserId: 1, isActive: 1 });
+userSchema.index({ userId: 1 }); // KEEP - Primary key
+userSchema.index({ email: 1 }); // KEEP - Unique constraint
+userSchema.index({ companyId: 1, userType: 1 }); // KEEP - Different query pattern
+userSchema.index({ parentUserId: 1, isActive: 1 }); // KEEP - Hierarchy queries
+// Add new performance indexes
+userSchema.index({ userId: 1, userType: 1, isActive: 1, createdAt: -1 }); // NEW - Main query
+userSchema.index({ name: "text", phone: "text", email: "text", "address.city": "text", "address.state": "text" }); // NEW - Search
+userSchema.index({ userId: 1, "walletBalance.remainingAmount": -1 }); // NEW - Sorting
+userSchema.index({ createdAt: -1, isActive: 1 });
 userHierarchySchema.index({ 'hierarchyPath.userId': 1 });
 userHierarchySchema.index({ 'crossCompanyAccess.companyId': 1 });
 supportPermissionSchema.index({ companyId: 1, isActive: 1 });
