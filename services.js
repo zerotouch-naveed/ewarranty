@@ -503,7 +503,10 @@ static async getManageableUsersWithFilters(
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
-      { userId: { $regex: search, $options: 'i' } }
+      { phone: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { 'address.city': { $regex: search, $options: 'i' } },
+      { 'address.state': { $regex: search, $options: 'i' } }
     ];
   }
 
@@ -523,7 +526,7 @@ static async getManageableUsersWithFilters(
     .sort(sortQuery)
     .skip((page - 1) * limit)
     .limit(limit)
-    .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount parentUserId');
+    .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId');
 
   return {
     users,
