@@ -62,9 +62,27 @@ async function authRoutes(fastify, options) {
               data: {
                 type: "object",
                 properties: {
-                  user: { type: "object" },
-                  token: { type: "string" },
-                  refreshToken: { type: "string" },
+                  user: { type: "object",
+                    properties: {
+                      name: { type: "string" },
+                      email: { type: "string" },
+                      phone: { type: "string" },
+                      userType: { type: "string" },
+                      companyId: { type: "string"},
+                      alternatePhone: { type: "string" },
+                      address: {
+                        type: "object",
+                        properties: {
+                          street: { type: "string" },
+                          city: { type: "string" },
+                          state: { type: "string" },
+                          country: { type: "string" },
+                          zipCode: { type: "string" },
+                        },
+                      },
+                    },
+                  },
+                  token: { type: "string" }
                 },
               },
             },

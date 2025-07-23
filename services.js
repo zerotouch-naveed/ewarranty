@@ -484,6 +484,57 @@ class HierarchyService {
     const users = await User.find(query).sort({ createdAt: -1 });
     return users;
   }
+
+
+static async getManageableUsersWithFilters(
+  managerUserId,
+  filters = {},
+  page = 1,
+  limit = 10,
+  search = '',
+  sortBy = 'createdAt',
+  sortOrder = 'desc'
+) {
+  const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId }).select('userId');
+  const userIds = hierarchies.map(h => h.userId);
+
+  let query = { userId: { $in: userIds } };
+
+  if (search) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { userId: { $regex: search, $options: 'i' } }
+    ];
+  }
+
+  query = { ...query, ...filters };
+
+  // Handle nested sort fields
+  let sortQuery = {};
+  if (sortBy === 'remainingAmount') {
+    sortQuery['walletBalance.remainingAmount'] = sortOrder === 'asc' ? 1 : -1;
+  } else {
+    sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
+  }
+
+  const totalData = await User.countDocuments(query);
+
+  const users = await User.find(query)
+    .sort(sortQuery)
+    .skip((page - 1) * limit)
+    .limit(limit)
+    .select('userId companyId name userType createdAt email phone walletBalance.remainingAmount parentUserId');
+
+  return {
+    users,
+    totalData,
+    currentPage: page,
+    totalPages: Math.ceil(totalData / limit),
+    limit
+  };
+}
+
+
 }
 
 // Enhanced Wallet Management Service (formerly Key Management)

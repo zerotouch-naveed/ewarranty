@@ -8,51 +8,91 @@ async function userRoutes(fastify, options) {
 
   // ✅ Get all users the current user can manage (based on upward hierarchy)
   fastify.post('/get-all', {
-    preHandler: [authenticate],
-    schema: {
-      description: 'Get users based on hierarchy',
-      tags: ['Users'],
-      security: [{ Bearer: [] }],
-      body: {
-        type: 'object',
-        required: ['userType'],
-        properties: {
-          userType: { 
-            type: 'string',
-            enum: [
-                "ALL",
-                "TSM",
-                "ASM",
-                "SALES_EXECUTIVE",
-                "SUPER_DISTRIBUTOR",
-                "DISTRIBUTOR",
-                "NATIONAL_DISTRIBUTOR",
-                "MINI_DISTRIBUTOR",
-                "RETAILER",
-                "WHITELABEL_OWNER"
-              ],
-          }
+  preHandler: [authenticate],
+  schema: {
+    description: 'Get users with filters, search, pagination, and sorting',
+    tags: ['Users'],
+    security: [{ Bearer: [] }],
+    body: {
+      type: 'object',
+      required: ['userType'],
+      properties: {
+        userType: {
+          type: 'string',
+          enum: [
+            "ALL", "TSM", "ASM", "SALES_EXECUTIVE",
+            "SUPER_DISTRIBUTOR", "DISTRIBUTOR", "NATIONAL_DISTRIBUTOR",
+            "MINI_DISTRIBUTOR", "RETAILER", "WHITELABEL_OWNER"
+          ],
+        },
+        search: { type: 'string' },
+        page: { type: 'integer', minimum: 1, default: 1 },
+        limit: { type: 'integer', minimum: 1, default: 10 },
+        status: { type: 'string', enum: ['true', 'false'], default: 'true' },
+        startDate: { type: 'string', format: 'date' },
+        endDate: { type: 'string', format: 'date' },
+        sortBy: {
+          type: 'string',
+          enum: ['name', 'createdAt', 'remainingAmount'],
+          default: 'createdAt'
+        },
+        sortOrder: {
+          type: 'string',
+          enum: ['asc', 'desc'],
+          default: 'desc'
         }
       }
     }
-  }, catchAsync(async (request, reply) => {
-    const { userType } = request.body;
-    const manageableUsers = await HierarchyService.getManageableUsers(request.user.userId, userType);
+  }
+}, catchAsync(async (request, reply) => {
+  const { userType, search = '', page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', status, startDate, endDate } = request.body;
 
-    const usersResponse = manageableUsers.map(user => {
-      const userObj = user.toObject();
-      delete userObj.password;
-      return userObj;
-    });
+  const filters = {};
+  if (userType !== 'ALL') filters.userType = userType;
+  if (status) filters.isActive = status;
+  if (startDate && endDate) {
+    filters['createdAt'] = {
+      $gte: new Date(startDate),
+      $lte: new Date(endDate)
+    };
+  }
 
-    console.log('usersResponse     ',usersResponse);
-    
+  const {
+    users,
+    totalData,
+    currentPage,
+    totalPages
+  } = await HierarchyService.getManageableUsersWithFilters(
+    request.user.userId,
+    filters,
+    page,
+    limit,
+    search,
+    sortBy,
+    sortOrder
+  );
 
-    return reply.send({
-      success: true,
-      data: { users: usersResponse }
-    });
-  }));
+  const usersResponse = users.map(user => {
+    const userObj = user.toObject();
+    delete userObj.password;
+    return userObj;
+  });
+
+  return reply.send({
+    success: true,
+    data: {
+      users: usersResponse,
+      pagination: {
+        currentPage,
+        totalPages,
+        totalData,
+        limit
+      }
+    }
+  });
+}));
+
+
 
   // ✅ Get user details with permission check
   fastify.post('/get', {
