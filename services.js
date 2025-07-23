@@ -520,9 +520,8 @@ static async getManageableUsersWithFilters(
   .sort(sortQuery)
   .skip((page - 1) * limit)
   .limit(limit)
-  .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId').explain('executionStats');
+  .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId');
 
-  console.log('Query execution stats:', users.executionStats);
 
   return {
     users,
