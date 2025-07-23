@@ -22,12 +22,6 @@ async function dashboardRoutes(fastify, options) {
 
       const users = (await HierarchyService.getManageableUsers(userId)) || [];
 
-      const sortedUsers = users.sort(
-        (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-      );
-
-      const lastAddedUsers = sortedUsers.slice(0, 5);
-
       // Count users by userType
       const userTypeCountMap = {};
       for (const user of users) {
@@ -42,7 +36,7 @@ async function dashboardRoutes(fastify, options) {
         })
       );
 
-      const customers =
+      const { customers, totalData } =
         (await CustomerService.getAccessibleCustomers(
           userId,
           companyId,
@@ -53,9 +47,9 @@ async function dashboardRoutes(fastify, options) {
       return reply.send({
         success: true,
         userTypeCount,
-        lastAddedUsers,
+        lastAddedUsers: customers,
         walletBalance,
-        totalCustomersCount: customers.length,
+        totalCustomersCount: totalData,
       });
     })
   );
