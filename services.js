@@ -474,7 +474,7 @@ class HierarchyService {
     return false;
   }
 
-  static async getManageableUsers(managerUserId) {
+  static async getManageableUsers(managerUserId, userType = 'ALL') {
     const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId });
     const userIds = hierarchies.map(h => h.userId);
     let query = { userId: { $in: userIds } };
