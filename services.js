@@ -552,8 +552,28 @@ class HierarchyService {
     .select('userId companyId name userType createdAt isActive email phone walletBalance.remainingAmount address.city address.state parentUserId')
     .lean();
 
+    const parentUserIds = users.map(u => u.parentUserId).filter(Boolean);
+    const parentUsersMap = await User.find({ userId: { $in: parentUserIds } })
+    .select('userId name')
+    .lean()
+    .then(results =>
+      results.reduce((acc, parent) => {
+        acc[parent.userId] = parent.name;
+        return acc;
+      }, {})
+    );
+
+  // Attach parent name to each user
+  const usersWithParent = users.map(user => ({
+    ...user,
+    parentUser: user.parentUserId ? {
+      userId: user.parentUserId,
+      name: parentUsersMap[user.parentUserId] || null
+    } : null
+  }));
+
     return {
-      users,
+      users: usersWithParent,
       totalData,
       currentPage: page,
       totalPages: Math.ceil(totalData / limit),
