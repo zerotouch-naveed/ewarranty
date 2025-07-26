@@ -42,12 +42,23 @@
            },
            owner: {
              type: 'object',
-             required: ['name', 'email', 'phone', 'password'],
+             required: ['name', 'email', 'phone', 'password', 'address'],
              properties: {
                name: { type: 'string', minLength: 2, maxLength: 100 },
                email: { type: 'string', format: 'email' },
                phone: { type: 'string', minLength: 10, maxLength: 15 },
-               password: { type: 'string', minLength: 8, maxLength: 128 }
+               password: { type: 'string', minLength: 8, maxLength: 128 },
+               alternatePhone: { type: "string" },
+                address: {
+                  type: "object",
+                  properties: {
+                    street: { type: "string" },
+                    city: { type: "string" },
+                    state: { type: "string" },
+                    country: { type: "string" },
+                    zipCode: { type: "string" },
+                  },
+                },
              }
            }
          }
@@ -169,6 +180,8 @@
          assignedAt: null,
          effectivePermissions: {}
        },
+       address: owner.address,
+       alternatePhone: owner.alternatePhone,
        assignedCompanies: [],
        createdBy: request.user.userId
      });
