@@ -74,13 +74,11 @@ const fs = require("fs");
         },
         warrantyDetails: {
           type: 'object',
-          required: ['startDate', 'expiryDate'],
+          required: ['warrantyPeriod', 'premiumAmount'],
           properties: {
             planId: { type: 'string' },
             planName: { type: 'string' },
             warrantyPeriod: { type: 'number' },
-            startDate: { type: 'string', format: 'date' },
-            expiryDate: { type: 'string', format: 'date' },
             premiumAmount: { type: 'number' }
           }
         },

@@ -1114,6 +1114,26 @@ class CustomerService {
         }
       }
 
+
+      // Calculate warranty start and end dates
+      const invoiceDate = new Date(customerData.invoiceDetails.invoiceDate);
+      const warrantyPeriod = customerData.warrantyDetails.warrantyPeriod || 12; // default 12 months
+      
+      // Start date: 1 year after invoice date
+      const startDate = new Date(invoiceDate);
+      startDate.setFullYear(startDate.getFullYear() + 1);
+      
+      // End date: start date + warranty period months
+      const expiryDate = new Date(startDate);
+      expiryDate.setMonth(expiryDate.getMonth() + warrantyPeriod);
+      
+      // Update warranty details with calculated dates
+      const updatedWarrantyDetails = {
+        ...customerData.warrantyDetails,
+        startDate,
+        expiryDate
+      };
+
       // Use a key to create warranty (retailer's key, not support employee's)
       const premiumAmount = customerData.warrantyDetails.premiumAmount;
       const { warrantyKey, walletRecord } = await WalletManagementService.useWalletForWarranty(
@@ -1140,7 +1160,7 @@ class CustomerService {
         productDetails: customerData.productDetails,
         invoiceDetails: customerData.invoiceDetails,
         productImages: customerData.productImages,
-        warrantyDetails: customerData.warrantyDetails,
+        warrantyDetails: updatedWarrantyDetails,
         paymentDetails: {
           ...customerData.paymentDetails,
           orderId: `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
