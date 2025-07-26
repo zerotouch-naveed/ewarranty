@@ -611,38 +611,6 @@ const customerSchema = new Schema({
       default: null
     }
   },
-  paymentDetails: {
-    paymentStatus: {
-      type: String,
-      enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'],
-      default: 'PENDING'
-    },
-    paymentDate: {
-      type: Date,
-      default: null
-    },
-    paymentMethod: {
-      type: String,
-      default: null
-    },
-    orderId: {
-      type: String,
-      unique: true,
-      required: true
-    },
-    paymentOrderId: {
-      type: String,
-      default: null
-    },
-    paymentId: {
-      type: String,
-      default: null
-    },
-    transactionId: {
-      type: String,
-      default: null
-    }
-  },
   hierarchy: {
     retailer: {
       userId: String,
@@ -710,6 +678,10 @@ const warrantyPlanSchema = new Schema({
     required: true
   },
   coverage: {
+    extendedWarranty: {
+      type: Boolean,
+      default: false
+    },
     accidentalDamage: {
       type: Boolean,
       default: false

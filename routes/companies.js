@@ -112,9 +112,9 @@
        address,
        branding,
        walletBalance: {
-         totalAmount,
+         totalAmount: 0,
          usedAmount: 0,
-         remainingAmount: totalAmount
+         remainingAmount: 0
        },
        settings: {
          timezone: 'UTC',
@@ -153,9 +153,9 @@
        parentUserId: null,
        hierarchyLevel: 0,
        walletBalance: {
-         totalAmount,
+         totalAmount:0,
          usedAmount: 0,
-         remainingAmount: totalAmount
+         remainingAmount: 0
        },
        permissions: {
          canCreateUser: true,
@@ -174,8 +174,14 @@
      });
      await ownerUser.save();
      // Create user hierarchy
-     const { HierarchyService } = require('../services');
+     const { HierarchyService, WalletManagementService } = require('../services');
      await HierarchyService.createUserHierarchy(ownerUser.userId, null, company.companyId);
+     await WalletManagementService.allocateWalletAmount(
+      request.user.userId,
+      ownerUser.userId,
+      totalAmount,
+      request.user.companyId
+    );
      // Create audit log
      const { AuditLog } = require('../schemas');
      const auditLog = new AuditLog({

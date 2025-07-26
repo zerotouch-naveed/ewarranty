@@ -1,6 +1,7 @@
 const { authenticate } = require('../middleware/auth');
 const { HierarchyService, WalletManagementService  } = require('../services');
 const { catchAsync } = require('../middleware/errorHandler');
+const { User } = require('../schemas');
 
 async function walletRoutes(fastify, options) {
   
@@ -75,16 +76,28 @@ async function walletRoutes(fastify, options) {
         message: 'Invalid User ID'
       });
     }
+    let companyId = request.user.companyId;
     if(request.user.userId !== userId){
-      const isAllowed = await HierarchyService.isAncestor(
-        request.user.userId,
-        userId
-      );
-      if (!isAllowed) {
-        return reply.code(403).send({
-          success: false,
-          message: 'Access denied'
-        });
+      if (request.user.userType !== 'MAIN_OWNER') {
+        const isAllowed = await HierarchyService.isAncestor(
+          request.user.userId,
+          userId
+        );
+        if (!isAllowed) {
+          return reply.code(403).send({
+            success: false,
+            message: 'Access denied'
+          });
+        }
+      } else {
+        const user = await User.findOne({ userId }).select('companyId');
+        if (!user) {
+          return reply.code(404).send({
+            success: false,
+            message: 'User not found'
+          });
+        }
+        companyId = user.companyId;
       }
     }
     const filters = {};
@@ -97,7 +110,7 @@ async function walletRoutes(fastify, options) {
     }
     const { history, totalData, currentPage, totalPages } = await WalletManagementService.getWalletHistory(
       userId,
-      request.user.companyId,
+      companyId,
       filters,
       page,
       limit,

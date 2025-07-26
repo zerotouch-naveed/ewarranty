@@ -40,6 +40,11 @@ async function userRoutes(fastify, options) {
           type: 'string',
           enum: ['asc', 'desc'],
           default: 'desc'
+        },
+        companyId: { 
+          type: 'string',
+          default: 'ALL',
+          description: "Company ID filter (only for MAIN_OWNER). Use 'ALL' or empty string for all companies"
         }
       }
     }
