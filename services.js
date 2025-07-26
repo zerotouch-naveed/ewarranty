@@ -526,19 +526,30 @@ class HierarchyService {
           $match: { userId: { $in: userIds } }
         },
         {
-          $group: {
-            _id: { $ifNull: ['$userType', 'UNKNOWN'] },
-            count: { $sum: 1 }
+          $facet: {
+            userTypeCounts: [
+              {
+                $group: { _id: { $ifNull: ['$userType', 'UNKNOWN'] }, count: { $sum: 1 } }
+              },
+              {
+                $project: { _id: 0, type: '$_id', count: 1 }
+              },
+              {
+                $sort: { type: 1 }
+              }
+            ],
+            totalCount: [
+              { 
+                $count: "total"
+              }
+            ]
           }
-        },
-        {
-          $project: { _id: 0, type: '$_id', count: 1 }
-        },
-        {
-          $sort: { type: 1 }
         }
       ];
       const result = await User.aggregate(pipeline);
+      const userTypeCounts = result[0]?.userTypeCounts || [];
+      const totalUsers = result[0]?.totalCount[0]?.total || 0;
+      return { userTypeCounts, totalUsers };
       return result;
     } catch (error) {
       console.error('Error in getManageableUserTypeCountsDirect:', error);

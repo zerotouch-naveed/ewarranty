@@ -296,7 +296,7 @@
    }));
  
    // Get All Companies (Super Admin only)
-   fastify.get('/all', {
+   fastify.post('/all', {
      preHandler: [authenticate, requireAdmin],
      schema: {
        description: 'Get all companies',
@@ -304,37 +304,14 @@
        security: [{ Bearer: [] }]
      }
    }, catchAsync(async (request, reply) => {
-     const { page = 1, limit = 10, search = '', status } = request.body;
  
-     const query = {};
-     if (search) {
-       query.$or = [
-         { name: { $regex: search, $options: 'i' } },
-         { email: { $regex: search, $options: 'i' } }
-       ];
-     }
-     if (status !== undefined) {
-       query.isActive = status === '1';
-     }
- 
-     const skip = (page - 1) * limit;
-     const companies = await Company.find(query)
-       .skip(skip)
-       .limit(parseInt(limit))
-       .sort({ createdAt: -1 });
- 
-     const total = await Company.countDocuments(query);
+     const companies = await Company.find()
+       .sort({ createdAt: -1 }).lean();
  
      return reply.send({
        success: true,
        data: {
          companies,
-         pagination: {
-           page: parseInt(page),
-           limit: parseInt(limit),
-           total,
-           pages: Math.ceil(total / limit)
-         }
        }
      });
    }));
