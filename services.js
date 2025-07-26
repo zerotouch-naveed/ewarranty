@@ -574,11 +574,14 @@ class HierarchyService {
         'hierarchyPath.userId': managerUserId
       });
 
+      // Remove managerUserId if it exists in hierarchyUserIds
+      const filteredHierarchyUserIds = hierarchyUserIds.filter(userId => userId !== managerUserId);
+
       // Build optimized query
-      query = { 
-        userId: { $in: hierarchyUserIds },
+      query = {
+        userId: { $in: filteredHierarchyUserIds },
         ...filters
-      };
+      }
     } else {
       companyList = await Company.find({ companyType: 'WHITELABEL' }).select('companyId name').lean();
       query = { ...filters };
@@ -627,7 +630,10 @@ class HierarchyService {
       sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
     }
 
-    const totalData = await User.countDocuments(query);
+    let totalData = await User.countDocuments(query);
+    if (isOwner){
+      totalData = totalData- 1
+    }
     
     const users = await User.find(query)
     .sort(sortQuery)
