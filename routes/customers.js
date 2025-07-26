@@ -2,7 +2,9 @@
  const { authenticate, requireRetailer } = require('../middleware/auth');
  const { CustomerService } = require('../services');
  const { catchAsync } = require('../middleware/errorHandler');
- 
+ const path = require("path");
+const fs = require("fs");
+
  async function customerRoutes(fastify, options) {
    
    // Create Customer (Retailers only)
@@ -109,6 +111,49 @@
        data: { customer }
      });
    }));
+
+fastify.post("/handle-file", async (req, reply) => {
+  try {
+    const parts = req.parts();
+    let data = {};
+    let fileName;
+    let filePath;
+
+    for await (const part of parts) {
+      if (part.type === "field") {
+        data[part.fieldname] = part.value;
+      } else if (part.type === "file") {
+        fileName = part.filename;
+        filePath = path.join("public/", fileName);
+        const writableStream = fs.createWriteStream(filePath);
+        await part.file.pipe(writableStream);
+      }
+    }
+
+    const mode = data.mode;
+    const deleteFileUrl = data.deleteFile;
+
+    if (mode === "delete") {
+      if (deleteFileUrl) {
+        const fileToDelete = path.join("public/", path.basename(deleteFileUrl));
+        if (fs.existsSync(fileToDelete)) {
+          fs.unlinkSync(fileToDelete);
+        }
+      }
+      return reply.send({ message: "deleted" });
+    }
+
+    if (mode === "upload") {
+      const uploadedUrl = `/public/${fileName}`;
+      return reply.send({ message: uploadedUrl });
+    }
+
+    return reply.status(400).send({ error: "Invalid mode" });
+  } catch (error) {
+    console.error(error);
+    reply.status(500).send({ error: "Internal Server Error" });
+  }
+});
  
    // Get Customers (based on hierarchy)
    fastify.post('/all', {
