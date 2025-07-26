@@ -4,7 +4,7 @@ const { catchAsync } = require("../middleware/errorHandler");
 const { HierarchyService, CustomerService } = require("../services");
 async function dashboardRoutes(fastify, options) {
   // Get Dashboard Stats
-  fastify.get(
+  fastify.post( // Changed to POST to accept body parameters
     "/stats",
     {
       preHandler: [authenticate],
@@ -12,47 +12,65 @@ async function dashboardRoutes(fastify, options) {
         description: "Get dashboard statistics",
         tags: ["Dashboard"],
         security: [{ Bearer: [] }],
+        body: {
+          type: "object",
+          properties: {
+            companyId: { 
+              type: "string",
+              description: "Company ID filter (only for MAIN_OWNER). Use 'ALL' or empty string for all companies"
+            }
+          }
+        }
       },
     },
     catchAsync(async (request, reply) => {
-      const { companyId, userId, userType } = request.user;
-
-      const user = await User.findOne({ userId }).select("walletBalance");
-      const walletBalance = user?.walletBalance;
-
-      const users = (await HierarchyService.getManageableUsers(userId)) || [];
-
-      // Count users by userType
-      const userTypeCountMap = {};
-      for (const user of users) {
-        const type = user.userType || "UNKNOWN";
-        userTypeCountMap[type] = (userTypeCountMap[type] || 0) + 1;
+    const { companyId: userCompanyId, userId, userType } = request.user;
+    
+    // Determine target company ID based on user type
+    let targetCompanyId = userCompanyId;
+    let filters = {};
+    if (userType === 'MAIN_OWNER') {
+      const requestedCompanyId = request.body?.companyId;
+      targetCompanyId = (!requestedCompanyId || requestedCompanyId === 'ALL' || requestedCompanyId === '') 
+        ? 'ALL' 
+        : requestedCompanyId;
+      if (targetCompanyId !== 'ALL' && targetCompanyId !== '') {
+        filters.companyId = targetCompanyId;
       }
+    }
 
-      const userTypeCount = Object.entries(userTypeCountMap).map(
-        ([type, count]) => ({
-          type,
-          count,
-        })
-      );
+    // Parallel execution of independent queries
+    const [user, userStatsData, customerData] = await Promise.all([
+      // Get wallet balance
+      User.findOne({ userId }).select("walletBalance").lean(),
+      
+      // Get user type counts and total count using aggregation
+      userType === 'MAIN_OWNER' 
+        ? HierarchyService.getOwnerUserTypeCounts(targetCompanyId)
+        : HierarchyService.getManageableUserTypeCounts(userId),
+      
+      // Get customer data
+      CustomerService.getAccessibleCustomers(userId, userCompanyId, userType, filters)
+    ]);
 
-      const { customers, totalData } =
-        (await CustomerService.getAccessibleCustomers(
-          userId,
-          companyId,
-          userType,
-          {}
-        )) || [];
+    const walletBalance = user?.walletBalance || 0;
+    const { customers, totalData, companyList } = customerData || { customers: [], totalData: 0 };
+    
+    // Extract user statistics
+    const { userTypeCounts, totalUsers } = userStatsData || { userTypeCounts: [], totalUsers: 0 };
 
-      return reply.send({
-        success: true,
-        userTypeCount,
-        lastAddedUsers: customers,
-        walletBalance,
-        totalCustomersCount: totalData,
-      });
-    })
-  );
+    return reply.send({
+      success: true,
+      userTypeCount: userTypeCounts,
+      totalUsersCount: totalUsers,
+      lastAddedUsers: customers,
+      walletBalance,
+      totalCustomersCount: totalData,
+      companyList,
+      ...(userType === 'MAIN_OWNER' && { filteredCompanyId: targetCompanyId })
+    });
+  })
+);
 
   fastify.get(
     "/retailer-stats",
@@ -83,6 +101,7 @@ async function dashboardRoutes(fastify, options) {
           .sort({ "dates.createdDate": -1 })
           .limit(10)
           .select({
+            "customerId": 1,
             "customerDetails.name": 1,
             "notes": 1,
             "productDetails.modelName": 1,
@@ -96,6 +115,7 @@ async function dashboardRoutes(fastify, options) {
 
         const lastAddedUsers = lastAddedUsersRaw.map((customer) => ({
           customerName: customer.customerDetails?.name || "",
+          customerId: customer.customerId || "",
           modelName: customer.productDetails?.modelName || "",
           notes: customer.notes || "",
           warrantyPeriod: customer.warrantyDetails?.warrantyPeriod || "",

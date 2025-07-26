@@ -474,15 +474,76 @@ class HierarchyService {
     return false;
   }
 
-  static async getManageableUsers(managerUserId, userType = 'ALL') {
-    const hierarchies = await UserHierarchy.find({ 'hierarchyPath.userId': managerUserId });
-    const userIds = hierarchies.map(h => h.userId);
-    let query = { userId: { $in: userIds } };
-    if (userType && userType !== 'ALL') {
-      query.userType = userType;
+  static async getOwnerUserTypeCounts(companyId) {
+    try {
+      let matchCondition = {};
+      if (companyId !== 'ALL') {
+        matchCondition.companyId = companyId;
+      }
+      const pipeline = [
+        {
+          $match: matchCondition
+        },
+        {
+          $facet: {
+            userTypeCounts: [
+              {
+                $group: { _id: { $ifNull: ['$userType', 'UNKNOWN'] }, count: { $sum: 1 } }
+              },
+              {
+                $project: {  _id: 0, type: '$_id', count: 1 }
+              },
+              {
+                $sort: { type: 1 }
+              }
+            ],
+            totalCount: [
+              {
+                $count: "total"
+              }
+            ]
+          }
+        }
+      ];
+      const result = await User.aggregate(pipeline);
+      const userTypeCounts = result[0]?.userTypeCounts || [];
+      const totalUsers = result[0]?.totalCount[0]?.total || 0;
+      return { userTypeCounts, totalUsers };
+    } catch (error) {
+      console.error('Error in getOwnerUserTypeCounts:', error);
+      return [];
     }
-    const users = await User.find(query).sort({ createdAt: -1 });
-    return users;
+  }
+
+  static async getManageableUserTypeCounts(managerUserId) {
+    try {
+      const userIds = await UserHierarchy.distinct('userId', {
+        'hierarchyPath.userId': managerUserId
+      });
+      if (userIds.length === 0) { return []; }
+      const pipeline = [
+        {
+          $match: { userId: { $in: userIds } }
+        },
+        {
+          $group: {
+            _id: { $ifNull: ['$userType', 'UNKNOWN'] },
+            count: { $sum: 1 }
+          }
+        },
+        {
+          $project: { _id: 0, type: '$_id', count: 1 }
+        },
+        {
+          $sort: { type: 1 }
+        }
+      ];
+      const result = await User.aggregate(pipeline);
+      return result;
+    } catch (error) {
+      console.error('Error in getManageableUserTypeCountsDirect:', error);
+      return [];
+    }
   }
 
   static async getManageableUsersWithFilters(
@@ -492,19 +553,31 @@ class HierarchyService {
     limit = 10,
     search = '',
     sortBy = 'createdAt',
-    sortOrder = 'desc'
+    sortOrder = 'desc',
+    isOwner = false
   ) {
-    const hierarchyUserIds = await UserHierarchy.distinct('userId', {
-      'hierarchyPath.userId': managerUserId
-    });
+    let query = {};
+    let companyList = []
+    if (!isOwner){
+      const hierarchyUserIds = await UserHierarchy.distinct('userId', {
+        'hierarchyPath.userId': managerUserId
+      });
 
-    // Build optimized query
-    let query = { 
-      userId: { $in: hierarchyUserIds },
-      ...filters
-    };
+      // Build optimized query
+      query = { 
+        userId: { $in: hierarchyUserIds },
+        ...filters
+      };
+    } else {
+      companyList = await Company.find({ companyType: 'WHITELABEL' }).select('companyId name').lean();
+      query = { ...filters };
+      if (filters.companyId) {
+        query.companyId = filters.companyId;
+      }
+    }
+    
 
-    if (search) {
+    if (search && search.trim() !== '') {
       const searchTerm = search.trim();
       // Create regex for partial matching
       const searchRegex = { $regex: searchTerm, $options: 'i' };
@@ -544,7 +617,7 @@ class HierarchyService {
     }
 
     const totalData = await User.countDocuments(query);
-
+    
     const users = await User.find(query)
     .sort(sortQuery)
     .skip((page - 1) * limit)
@@ -562,22 +635,22 @@ class HierarchyService {
         return acc;
       }, {})
     );
-
-  // Attach parent name to each user
-  const usersWithParent = users.map(user => ({
-    ...user,
-    parentUser: user.parentUserId ? {
-      userId: user.parentUserId,
-      name: parentUsersMap[user.parentUserId] || null
-    } : null
-  }));
+    // Attach parent name to each user
+    const usersWithParent = users.map(user => ({
+      ...user,
+      parentUser: user.parentUserId ? {
+        userId: user.parentUserId,
+        name: parentUsersMap[user.parentUserId] || null
+      } : null
+    }));
 
     return {
       users: usersWithParent,
       totalData,
       currentPage: page,
       totalPages: Math.ceil(totalData / limit),
-      limit
+      limit,
+      companyList
     };
   }
 
@@ -1097,11 +1170,29 @@ class CustomerService {
       let customers = []
       let query = {};
       if (search) {
-       query.$or = [
-         { name: { $regex: search, $options: 'i' } },
-         { email: { $regex: search, $options: 'i' } }
-       ];
+      const searchTerm = search.trim();
+      // Create regex for partial matching
+      const searchRegex = { $regex: searchTerm, $options: 'i' };
+      if (searchTerm.includes('@')) {
+        query.$or = [
+          { email: searchRegex },
+          { userId: searchRegex }
+        ];
+      } else if (/^\+?[\d\s\-\(\)]{10,}$/.test(searchTerm)) {
+        query.$or = [
+          { phone: searchRegex }
+        ];
+      } else {
+        query.$or = [
+          { name: searchRegex },
+          { userId: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex },
+          { 'customerDetails.address.city': searchRegex },
+          { 'customerDetails.address.state': searchRegex }
+        ];
       }
+    }
 
       let sortQuery = {};
       if (sortBy === 'createdDate') {
@@ -1111,7 +1202,7 @@ class CustomerService {
       } else {
         sortQuery[sortBy] = sortOrder === 'asc' ? 1 : -1;
       }
-      const limitedFields = "warrantyKey customerId status customerDetails.name productDetails.modelName productDetails.category warrantyDetails.premiumAmount warrantyDetails.warrantyPeriod dates.createdDate isActive notes"
+      const limitedFields = "warrantyKey companyId customerId status customerDetails.name customerDetails.address.city customerDetails.address.state productDetails.modelName productDetails.category warrantyDetails.premiumAmount warrantyDetails.warrantyPeriod dates.createdDate isActive notes"
       if(userType == "RETAILER") {
         query.retailerId = userId;
         query.companyId = companyId;
@@ -1119,6 +1210,13 @@ class CustomerService {
           ...query,
           ...filters
         };
+      } else if(userType == "MAIN_OWNER") {
+        query = {
+          ...query,
+          ...filters
+        };
+        console.log('query   ',query);
+        
       } else {
           let hierarchy = null;
           let accessibleUserIds = [];
@@ -1133,13 +1231,8 @@ class CustomerService {
         } else {
           // Regular hierarchy access
           accessibleUserIds = await UserHierarchy.distinct('userId', { 'hierarchyPath.userId': userId });
-          console.log('hierarchy:', hierarchy);
           if (!accessibleUserIds) return [];
-
           accessibleUserIds.push(userId);
-          console.log('accessibleUserIds:', accessibleUserIds);
-          console.log('companyId:', companyId);
-
           // Add cross-company access for main company users
           if (user.userType.startsWith('MAIN_')) {
             const whitelabelUsers = await User.find({
@@ -1163,14 +1256,19 @@ class CustomerService {
         
       }
       customers = await Customer.find(query).sort(sortQuery).skip((page - 1) * limit).limit(limit).select(limitedFields).lean();
+      let companyList = []
+      if(userType == "MAIN_OWNER"){
+        companyList = await Company.find({ companyType: 'WHITELABEL' }).select('companyId name').lean();
+      }
       const totalData = await Customer.countDocuments(query);
       return{
-      customers,
-      totalData,
-      currentPage: page,
-      totalPages: Math.ceil(totalData / limit),
-      limit
-    };
+        customers,
+        totalData,
+        currentPage: page,
+        totalPages: Math.ceil(totalData / limit),
+        limit,
+        companyList
+      };
     } catch (error) {
       console.log(error);
       
@@ -1181,21 +1279,8 @@ class CustomerService {
   // Check if user can access a specific customer
   static async canAccessCustomer(userId, customerId) {
     try {
-      const customer = await Customer.findOne({ customerId });
+      const customer = await Customer.findOne({ customerId }).select('retailerId');
       if (!customer) return false;
-
-      const user = await User.findOne({ userId });
-      if (!user) return false;
-
-      // Support employees need specific permission and assignment
-      if (user.userType.includes('SUPPORT_EMPLOYEE')) {
-        const assignments = await SupportAssignmentService.getUserAssignments(userId);
-        const hasPermission = assignments.some(a => a.effectivePermissions?.canViewCustomers);
-        if (!hasPermission) return false;
-
-        return await this.checkUserPermission(userId, customer.retailerId, 'VIEW_CUSTOMERS');
-      }
-
       // Regular permission check
       return await HierarchyService.checkUserPermission(userId, customer.retailerId, 'VIEW');
     } catch (error) {

@@ -45,11 +45,12 @@ async function userRoutes(fastify, options) {
     }
   }
 }, catchAsync(async (request, reply) => {
-  const { userType, search = '', page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', status, startDate, endDate } = request.body;
+  const { userType, search = '', page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', status, startDate, endDate, companyId } = request.body;
 
   const filters = {};
   if (userType !== 'ALL') filters.userType = userType;
   if (status) filters.isActive = status;
+  if (request.user.userType === 'MAIN_OWNER' && companyId !== 'ALL' && companyId !== '') filters.companyId = companyId;
   if (startDate && endDate) {
     filters['createdAt'] = {
       $gte: new Date(startDate),
@@ -61,7 +62,8 @@ async function userRoutes(fastify, options) {
     users,
     totalData,
     currentPage,
-    totalPages
+    totalPages,
+    companyList
   } = await HierarchyService.getManageableUsersWithFilters(
     request.user.userId,
     filters,
@@ -69,13 +71,15 @@ async function userRoutes(fastify, options) {
     limit,
     search,
     sortBy,
-    sortOrder
+    sortOrder,
+    request.user.userType === 'MAIN_OWNER' ? true : false
   );
 
   return reply.send({
     success: true,
     data: {
       users,
+      companyList,
       pagination: {
         currentPage,
         totalPages,
@@ -84,9 +88,7 @@ async function userRoutes(fastify, options) {
       }
     }
   });
-}));
-
-
+  }));
 
   // ✅ Get user details with permission check
   fastify.post('/get', {

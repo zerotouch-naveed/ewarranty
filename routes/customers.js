@@ -127,6 +127,7 @@
         status: { type: 'string', enum: ['true', 'false'], default: 'true' },
         startDate: { type: 'string', format: 'date' },
         endDate: { type: 'string', format: 'date' },
+        companyId: { type: 'string' },
         sortBy: {
           type: 'string',
           enum: ['createdDate', 'premiumAmount'],
@@ -141,22 +142,26 @@
     },
      }
    }, catchAsync(async (request, reply) => {
-     const { status, startDate, endDate, page = 1, limit = 1, search = '', sortBy = 'createdDate', sortOrder = 'desc' } = request.body;
+     const { status, startDate, endDate, page = 1, limit = 1, search = '', sortBy = 'createdDate', sortOrder = 'desc', companyId = 'ALL' } = request.body;
      
      const filters = {};
      if (status) filters.isActive = status;
+     if (request.user.userType === 'MAIN_OWNER' && companyId !== 'ALL' && companyId !== '') filters.companyId = companyId;    
      if (startDate && endDate) {
        filters['dates.createdDate'] = {
          $gte: new Date(startDate),
          $lte: new Date(endDate)
        };
      }
+
+     console.log('filters    ',  filters);
  
      const {
       customers,
       totalData,
       currentPage,
-      totalPages
+      totalPages,
+      companyList
     } = await CustomerService.getAccessibleCustomers(
        request.user.userId,
        request.user.companyId,
@@ -173,6 +178,7 @@
        success: true,
        data: {
         customers,
+        companyList,
         pagination: {
           currentPage,
           totalPages,
@@ -199,30 +205,29 @@
       }
      }
    }, catchAsync(async (request, reply) => {
-     const canAccess = await CustomerService.canAccessCustomer(
-       request.user.userId,
-       request.body.customerId
-     );
+    const canAccess = await CustomerService.canAccessCustomer(
+      request.user.userId,
+      request.body.customerId
+    );
+
+    if (!canAccess) {
+      return reply.code(403).send({ 
+        success: false,
+        error: 'No permission to view this customer' 
+      });
+    }
+    const customer = await Customer.findOne({ customerId: request.body.customerId });
+    if (!customer) {
+      return reply.code(404).send({ 
+        success: false,
+        error: 'Customer not found' 
+      });
+    }
  
-     if (!canAccess) {
-       return reply.code(403).send({ 
-         success: false,
-         error: 'No permission to view this customer' 
-       });
-     }
- 
-     const customer = await Customer.findOne({ customerId: request.body.customerId });
-     if (!customer) {
-       return reply.code(404).send({ 
-         success: false,
-         error: 'Customer not found' 
-       });
-     }
- 
-     return reply.send({
-       success: true,
-       data: { customer }
-     });
+    return reply.send({
+      success: true,
+      data: { customer }
+    });
    }));
  }
  
