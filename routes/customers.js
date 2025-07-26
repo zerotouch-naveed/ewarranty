@@ -81,17 +81,6 @@ const fs = require("fs");
             warrantyPeriod: { type: 'number' },
             premiumAmount: { type: 'number' }
           }
-        },
-        paymentDetails: {
-          type: 'object',
-          properties: {
-            paymentStatus: { type: 'string', enum: ['PENDING', 'PAID', 'FAILED', 'REFUNDED'] },
-            paymentDate: { type: 'string', format: 'date' },
-            paymentMethod: { type: 'string' },
-            paymentOrderId: { type: 'string' },
-            paymentId: { type: 'string' },
-            transactionId: { type: 'string' }
-          }
         }
       }
     }

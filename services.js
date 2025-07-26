@@ -1161,10 +1161,7 @@ class CustomerService {
         invoiceDetails: customerData.invoiceDetails,
         productImages: customerData.productImages,
         warrantyDetails: updatedWarrantyDetails,
-        paymentDetails: {
-          ...customerData.paymentDetails,
-          orderId: `ORD_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-        },
+        
         hierarchy: {
           retailer: {
             userId: retailer.userId,
