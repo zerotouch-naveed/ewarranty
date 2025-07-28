@@ -180,7 +180,7 @@ const start = async () => {
     async function transferToRetailer(paymentId, accountId, amount) {
       try{
 
-      await axios.post(
+      const response = await axios.post(
         `https://api.razorpay.com/v1/payments/${paymentId}/transfers`,
         {
           "transfers": [
