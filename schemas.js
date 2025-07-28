@@ -758,6 +758,26 @@ const warrantyPlanSchema = new Schema({
   },
 });
 
+const TransferLogSchema = new mongoose.Schema({
+  paymentId: String,
+  accountId: String,
+  amount: Number,
+  response: Object,
+  success: Boolean,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const WebhookLogSchema = new mongoose.Schema({
+  event: String,
+  paymentId: String,
+  subscriptionId: String,
+  amount: Number,
+  method: String,
+  notes: Object,
+  fullPayload: Object,
+  createdAt: { type: Date, default: Date.now },
+});
+
 // 9. Claims Schema (unchanged)
 const claimSchema = new Schema({
   claimId: {
@@ -1101,6 +1121,8 @@ const WarrantyPlan = mongoose.model("WarrantyPlan", warrantyPlanSchema);
 const Claim = mongoose.model("Claim", claimSchema);
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
 const Settings = mongoose.model("Settings", settingsSchema);
+const TransferLog = mongoose.model("TransferLog", TransferLogSchema);
+const WebhookLog = mongoose.model("WebhookLog", WebhookLogSchema);
 const SupportEmployeeAssignment = mongoose.model(
   "SupportEmployeeAssignment",
   supportEmployeeAssignmentSchema
@@ -1120,4 +1142,6 @@ module.exports = {
   AuditLog,
   Settings,
   SupportEmployeeAssignment,
+  TransferLog,
+  WebhookLog,
 };

@@ -18,6 +18,8 @@ const fastify = require("fastify")({
 
 const mongoose = require("mongoose");
 const path = require("path");
+const axios = require('axios')
+const crypto = require('crypto')
 
 // Database connection
 const connectDB = require("./config/database");
@@ -119,6 +121,104 @@ const start = async () => {
     });
     // Register error handler
     fastify.setErrorHandler(errorHandler);
+
+  const { WebhookLog, TransferLog } = require("./schemas");
+
+
+    fastify.post('/webhook/razorpay', async (request, reply) => {
+    const secret = 'your_webhook_secret';
+
+    const signature = request.headers['x-razorpay-signature'];
+    const body = JSON.stringify(request.body);
+
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(body)
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      fastify.log.warn('Invalid webhook signature');
+      return reply.code(400).send({ status: 'invalid signature' });
+    }
+
+    const event = request.body.event;
+    const payload = request.body.payload;
+
+    if (event === 'subscription.charged') {
+      const payment = payload.payment.entity;
+      const subscription = payload.subscription.entity;
+
+      const paymentId = payment.id;
+      const subscriptionId = subscription.id;
+      const amount = payment.amount; // in paise
+      const method = payment.method;
+      const notes = subscription.notes;
+      const retailerAccountId = notes.retailer_account_id;
+
+      await WebhookLog.create({
+        event,
+        paymentId,
+        subscriptionId,
+        amount,
+        method,
+        notes,
+        fullPayload: request.body,
+      });
+
+      const fee = 2000;
+      const netAmount = amount - fee;
+
+      fastify.log.info(`Payment ${paymentId} processed. Gross: ${amount}, Fee: ${fee}, Net: ${netAmount}`);
+
+      await transferToRetailer(paymentId, retailerAccountId, netAmount);
+    }
+
+    return reply.code(200).send({ status: 'ok' });
+  });
+
+
+    async function transferToRetailer(paymentId, accountId, amount) {
+      try{
+
+      await axios.post(
+        `https://api.razorpay.com/v1/payments/${paymentId}/transfers`,
+        {
+          "transfers": [
+            {
+              "account": accountId,
+              "amount": amount,
+              "currency": "INR",
+              "notes": {
+                  "name": "Mohammad Fawwaz Khatri",
+                  "accountId": accountId
+              },
+              "linked_account_notes": [
+                  "accountId"
+              ],
+              "on_hold": false
+            }
+          ]
+        },
+        {
+          auth: {
+            username: process.env.razorpayUsername,
+            password: process.env.razorpayPassword,
+          },
+        }
+      )
+        await TransferLog.create({
+          paymentId,
+          accountId,
+          amount,
+          response: response.data,
+          success: true
+        });
+    }catch (error) {
+      // if it’s a Razorpay error, it will have a response.data.error
+      console.error('Transfer error payload:', error.response?.data);
+      throw error;
+    }
+}
 
     // Health check route
     fastify.get("/health", async (request, reply) => {
