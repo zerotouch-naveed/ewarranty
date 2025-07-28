@@ -1,5 +1,5 @@
 const { WarrantyPlan } = require('../schemas');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 const { catchAsync } = require('../middleware/errorHandler');
 
 async function warrantyPlanRoutes(fastify, options) {
@@ -28,7 +28,7 @@ async function warrantyPlanRoutes(fastify, options) {
   // Optimized Warranty Plan Creation Route with Swagger Documentation
 
 fastify.post('/create', {
-  preHandler: [authenticate],
+  preHandler: [authenticate,requireAdmin],
   schema: {
     description: 'Create a new warranty plan',
     summary: 'Create warranty plan',
@@ -127,13 +127,7 @@ fastify.post('/create', {
   }
 }, catchAsync(async (request, reply) => {
   try {
-    // Generate unique plan ID with better entropy
-    if (request.user.userType !== 'WHITELABEL_OWNER'){
-        return reply.code(403).send({
-          success: false,
-          message: 'Access denied'
-      });
-    }
+    
 
     const timestamp = Date.now();
       const randomString = Math.random().toString(36).substring(2, 11);
