@@ -284,7 +284,7 @@ curl -X POST http://localhost:3000/api/customers \
     },
     "productDetails": {
       "modelName": "iPhone 14",
-      "imei1": "123456789012345",
+      "serialNumber": "123456789012345",
       "brand": "Apple"
     },
     "invoiceDetails": {

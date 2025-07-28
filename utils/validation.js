@@ -4,7 +4,6 @@
  const patterns = {
    objectId: /^[a-fA-F0-9]{24}$/,
    phone: /^[+]?[\d\s\-\(\)]{10,15}$/,
-   imei: /^[0-9]{15}$/,
    warrantyKey: /^WK_\d+_[A-Z0-9]{9}$/,
    userId: /^USER_\d+_[a-z0-9]{9}$/,
    customerId: /^CUST_\d+_[a-z0-9]{9}$/,
@@ -131,8 +130,6 @@
  
      productDetails: Joi.object({
        modelName: Joi.string().max(50).required(),
-       imei1: Joi.string().pattern(patterns.imei).required(),
-       imei2: Joi.string().pattern(patterns.imei).allow(null, ''),
        brand: Joi.string().max(50).required(),
        category: Joi.string().max(50).required(),
        purchasePrice: Joi.number().positive().required()

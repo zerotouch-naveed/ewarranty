@@ -1497,7 +1497,7 @@ class ValidationService {
 
       // Check IMEI uniqueness globally
       const imeiExists = await Customer.findOne({
-        'productDetails.imei1': productDetails.imei1
+        'productDetails.serialNumber': productDetails.serialNumber
       });
       if (imeiExists) {
         throw new Error('IMEI already exists');

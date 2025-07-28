@@ -51,10 +51,10 @@ async function customerRoutes(fastify, options) {
             },
             productDetails: {
               type: "object",
-              required: ["imei1"],
+              required: ["serialNumber"],
               properties: {
                 modelName: { type: "string" },
-                imei1: { type: "string" },
+                serialNumber: { type: "string" },
                 imei2: { type: "string" },
                 brand: { type: "string" },
                 category: { type: "string" },
@@ -150,7 +150,7 @@ async function customerRoutes(fastify, options) {
         }
 
         if (mode === "upload") {
-          const uploadedUrl = `/public/${fileName}`;
+          const uploadedUrl = `public/${fileName}`;
           return reply.send({ message: uploadedUrl });
         }
 
