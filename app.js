@@ -87,7 +87,7 @@ const start = async () => {
         },
         host:
           process.env.VERCEL || process.env.LAMBDA_TASK_ROOT
-            ? "ewarranty-oefb.vercel.app"
+            ? "ewarranty.vercel.app"
             : `localhost:${process.env.PORT || 3000}`,
         schemes:
           process.env.VERCEL || process.env.LAMBDA_TASK_ROOT
