@@ -14,7 +14,6 @@ async function warrantyPlanRoutes(fastify, options) {
     }
   }, catchAsync(async (request, reply) => {
     const plans = await WarrantyPlan.find({
-      companyId: request.user.userType !== 'MAIN_OWNER' ? request.user.companyId : { $exists: true },
       isActive: true
     }).select("planId companyId planName planDescription duration premiumAmount eligibleCategories createdAt");
 
