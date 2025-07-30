@@ -165,7 +165,7 @@ const start = async () => {
         fullPayload: request.body,
       });
 
-      const fee = 400;
+      const fee = 3000;
       const netAmount = amount - fee;
 
       fastify.log.info(`Payment ${paymentId} processed. Gross: ${amount}, Fee: ${fee}, Net: ${netAmount}`);
