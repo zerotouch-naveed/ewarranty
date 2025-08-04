@@ -505,10 +505,25 @@ async function authRoutes(fastify, options) {
       const userResponse = request.user;
       delete userResponse.password;
 
+      const parentUser = await User.findOne({ userId: userResponse.parentUserId })
+      .select('userId name phone email userType -_id')
+      .lean();
+      // Attach parent name to each user
+      const userWithParent = {
+        ...userResponse,
+        parentUser: userResponse.parentUserId ? {
+          userId: userResponse.parentUserId,
+          name: parentUser.name,
+          phone: parentUser.phone,
+          email: parentUser.email,
+          userType: parentUser.userType || null
+        } : null
+      };
+
       return reply.send({
         success: true,
         data: {
-          user: userResponse,
+          user: userWithParent,
         },
       });
     })

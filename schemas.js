@@ -676,11 +676,76 @@ const customerSchema = new Schema({
 
 const categorySchema = new Schema({
   categoryName: { type: String, unique: true, required: true },
+  categoryId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+  },
+  percent: {
+    type: Number,
+    required: true,
+  },
   isActive: {
     type: Boolean,
     default: true,
   },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  img: {
+    type: String,
+    default: null,
+  },
+  description: {
+    type: String,
+    default: null,
+  },
 });
+
+const brandSchema = new Schema({
+  brandName: { type: String, unique: true, required: true },
+  brandId: {
+    type: String,
+    required: true,
+    unique: true,
+    index: true,
+  },
+  categoryIds: [
+    {
+      categoryId: {
+        type: String,
+        ref: "Company",
+      },
+      categoryName: {
+        type: String,
+        default: "",
+      },
+    }
+  ],
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now,
+  },
+  updatedAt: {
+    type: Date,
+    default: Date.now,
+  },
+  img: {
+    type: String,
+    default: null,
+  },
+});
+  
 
 // 8. Warranty Plans Schema (unchanged)
 const warrantyPlanSchema = new Schema({
@@ -1117,6 +1182,7 @@ const WalletManagement = mongoose.model(
 );
 const Customer = mongoose.model("Customer", customerSchema);
 const Category = mongoose.model("Category", categorySchema);
+const Brand = mongoose.model("Brand", brandSchema);
 const WarrantyPlan = mongoose.model("WarrantyPlan", warrantyPlanSchema);
 const Claim = mongoose.model("Claim", claimSchema);
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
@@ -1144,4 +1210,5 @@ module.exports = {
   SupportEmployeeAssignment,
   TransferLog,
   WebhookLog,
+  Brand,
 };

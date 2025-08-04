@@ -59,6 +59,7 @@ async function userRoutes(fastify, options) {
               description:
                 "Company ID filter (only for MAIN_OWNER). Use 'ALL' or empty string for all companies",
             },
+            isCsv: { type: "boolean", default: false },
           },
         },
       },
@@ -75,6 +76,7 @@ async function userRoutes(fastify, options) {
         startDate,
         endDate,
         companyId,
+        isCsv = false
       } = request.body;
 
       const filters = {};
@@ -93,17 +95,44 @@ async function userRoutes(fastify, options) {
         };
       }
 
+      const csvLimit = isCsv ? 10000 : limit; // Adjust as needed
+      const csvPage = isCsv ? 1 : page;
+
       const { users, totalData, currentPage, totalPages, companyList } =
         await HierarchyService.getManageableUsersWithFilters(
           request.user.userId,
           filters,
-          page,
-          limit,
+          csvPage,
+          csvLimit,
           search,
           sortBy,
           sortOrder,
-          request.user.userType === "MAIN_OWNER" ? true : false
+          request.user.userType === "MAIN_OWNER"
         );
+
+        if (isCsv) {
+          if (!users || users.length === 0) {
+            return reply.code(404).send({
+              success: false,
+              message: 'No users found for CSV export'
+            });
+          }
+
+          const csvOutput = jsonToCsv(users);
+          
+          // Generate filename with timestamp and filters
+          const timestamp = new Date().toISOString().split('T')[0];
+          const userTypeFilter = userType !== 'ALL' ? `_${userType}` : '';
+          const filename = `users_${request.user.userType}${userTypeFilter}_${timestamp}.csv`;
+          
+          reply.header('Content-Type', 'text/csv; charset=utf-8');
+          reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+          reply.header('Cache-Control', 'no-cache');
+          reply.header('Content-Length', Buffer.byteLength(csvOutput, 'utf8'));
+          
+          // Use reply.send() instead of return
+          return reply.send(csvOutput);
+      }
 
       return reply.send({
         success: true,
@@ -120,6 +149,63 @@ async function userRoutes(fastify, options) {
       });
     })
   );
+
+
+  function jsonToCsv(jsonArray) {
+  if (!jsonArray || jsonArray.length === 0) {
+    return 'No data available';
+  }
+  
+  try {
+    // Flatten nested objects for CSV export
+    const flattenedData = jsonArray.map(user => ({
+      userId: user.userId || '',
+      companyId: user.companyId || '',
+      name: user.name || '',
+      userType: user.userType || '',
+      email: user.email || '',
+      phone: user.phone || '',
+      isActive: user.isActive ? 'Active' : 'Inactive',
+      remainingAmount: user.walletBalance?.remainingAmount || 0,
+      city: user.address?.city || '',
+      state: user.address?.state || '',
+      parentUserName: user.parentUser?.name || '',
+      createdAt: user.createdAt ? new Date(user.createdAt).toLocaleDateString() : ''
+    }));
+
+    // Get headers from first object
+    const headers = Object.keys(flattenedData[0]);
+    
+    // Create CSV content
+    const csvContent = [
+      headers.join(','), // Header row
+      ...flattenedData.map(row => 
+        headers.map(header => {
+          let value = row[header];
+          
+          // Handle null/undefined values
+          if (value === null || value === undefined) {
+            value = '';
+          }
+          
+          // Convert to string and handle special characters
+          value = String(value);
+          
+          // Escape quotes and wrap in quotes if contains comma, quote, or newline
+          if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+            value = `"${value.replace(/"/g, '""')}"`;
+          }
+          
+          return value;
+        }).join(',')
+      )
+    ].join('\n');
+    return csvContent;
+  } catch (error) {
+    console.error('Error converting to CSV:', error);
+    return 'Error generating CSV data';
+  }
+}
 
   // ✅ Get user details with permission check
   fastify.post(
@@ -161,10 +247,24 @@ async function userRoutes(fastify, options) {
           error: "User not found",
         });
       }
+      const parentUser = await User.findOne({ userId: user.parentUserId })
+      .select('userId name phone email userType -_id')
+      .lean();
+      // Attach parent name to each user
+      const userWithParent = {
+        ...user,
+        parentUser: user.parentUserId ? {
+          userId: user.parentUserId,
+          name: parentUser.name,
+          phone: parentUser.phone,
+          email: parentUser.email,
+          userType: parentUser.userType || null
+        } : null
+      };
 
       return reply.send({
         success: true,
-        data: { user },
+        data: { user: userWithParent },
       });
     })
   );
