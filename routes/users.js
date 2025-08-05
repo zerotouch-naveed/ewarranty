@@ -60,6 +60,12 @@ async function userRoutes(fastify, options) {
                 "Company ID filter (only for MAIN_OWNER). Use 'ALL' or empty string for all companies",
             },
             isCsv: { type: "boolean", default: false },
+            userId: {
+              type: "string",
+              default: "ALL",
+              description:
+                "User ID filter (only for MAIN_OWNER). Use 'ALL' or empty string for all companies",
+            },
           },
         },
       },
@@ -76,8 +82,10 @@ async function userRoutes(fastify, options) {
         startDate,
         endDate,
         companyId,
-        isCsv = false
+        isCsv = false,
+        userId = request.user.userId,
       } = request.body;
+      let targetUserId = request.user.userId;
 
       const filters = {};
       if (userType !== "ALL") filters.userType = userType;
@@ -95,12 +103,31 @@ async function userRoutes(fastify, options) {
         };
       }
 
+      if (userId &&
+        userId !== "ALL" &&
+        userId !== "" &&
+        userId !== undefined &&
+        userId !== request.user.userId
+      ){
+        targetUserId = userId;
+        const isAllowed = await HierarchyService.isAncestor(
+          request.user.userId,
+          targetUserId
+        );
+        if (!isAllowed) {
+          return reply.code(403).send({
+            success: false,
+            message: 'Access denied'
+          });
+        }
+      }
+      
       const csvLimit = isCsv ? 10000 : limit; // Adjust as needed
       const csvPage = isCsv ? 1 : page;
 
       const { users, totalData, currentPage, totalPages, companyList } =
         await HierarchyService.getManageableUsersWithFilters(
-          request.user.userId,
+          targetUserId,
           filters,
           csvPage,
           csvLimit,
@@ -240,7 +267,7 @@ async function userRoutes(fastify, options) {
 
       const user = await User.findOne({ userId: request.body.userId }).select(
         "-password"
-      );
+      ).lean();
       if (!user) {
         return reply.code(404).send({
           success: false,

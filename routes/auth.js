@@ -112,10 +112,20 @@ async function authRoutes(fastify, options) {
         });
       }
 
-      // Check if user already exists
-      const existingUser = await User.findOne({
+      let query = {};
+      if (request.user.userType === "MAIN_OWNER"){
+       query =  {
+                $or: [{ email }, { phone }],
+              }
+      }else{
+        query = {
         $or: [{ email }, { phone }],
-      });
+        companyId: request.user.companyId
+      }
+      }
+
+      // Check if user already exists
+      const existingUser = await User.findOne(query);
 
       if (existingUser) {
         return reply.code(400).send({

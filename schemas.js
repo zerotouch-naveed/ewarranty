@@ -1,3 +1,4 @@
+const { duration } = require("moment");
 const mongoose = require("mongoose");
 const { Schema } = mongoose;
 
@@ -581,10 +582,6 @@ const customerSchema = new Schema({
       required: true,
       unique: true,
     },
-    invoiceAmount: {
-      type: Number,
-      default: null,
-    },
     invoiceImage: {
       type: String, // URL to invoice image
       required: true,
@@ -610,14 +607,6 @@ const customerSchema = new Schema({
     ],
   },
   warrantyDetails: {
-    planId: {
-      type: String,
-      default: null,
-    },
-    planName: {
-      type: String,
-      default: null,
-    },
     warrantyPeriod: {
       type: Number, // in months
       default: null,
@@ -682,10 +671,23 @@ const categorySchema = new Schema({
     unique: true,
     index: true,
   },
-  percent: {
-    type: Number,
-    required: true,
-  },
+  percentList: [{
+    percent: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 100
+    },
+    duration: {
+      type: Number,
+      required: true,
+      min: 0
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  }],
   isActive: {
     type: Boolean,
     default: true,

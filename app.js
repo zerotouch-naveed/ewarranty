@@ -33,6 +33,9 @@ const customerRoutes = require("./routes/customers");
 const warrantyRoutes = require("./routes/warranty-plans");
 const claimRoutes = require("./routes/claims");
 const dashboardRoutes = require("./routes/dashboard");
+const brandRoutes = require("./routes/brands");
+const categoriesRoutes = require("./routes/categories");
+
 
 // Global error handler
 const { errorHandler } = require("./middleware/errorHandler");
@@ -267,6 +270,8 @@ const start = async () => {
     await fastify.register(warrantyRoutes, { prefix: "/api/warranty-plans" });
     await fastify.register(claimRoutes, { prefix: "/api/claims" });
     await fastify.register(dashboardRoutes, { prefix: "/api/dashboard" });
+    await fastify.register(brandRoutes, { prefix: "/api/brands" });
+    await fastify.register(categoriesRoutes, { prefix: "/api/categories" });
 
     // For Vercel serverless deployment
     if (process.env.VERCEL || process.env.LAMBDA_TASK_ROOT) {
