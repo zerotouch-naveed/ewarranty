@@ -1097,6 +1097,10 @@ class CustomerService {
       const creator = await User.findOne({ userId: actualCreator });
       const retailer = await User.findOne({ userId: retailerId });
 
+      const company = await Company.findOne({ companyId });
+      if (!company) throw new Error('Company not found');
+
+
       if (!creator || !retailer) {
         throw new Error('Creator or retailer not found');
       }
@@ -1152,7 +1156,7 @@ class CustomerService {
 
       // Create customer
       const customer = new Customer({
-        customerId: `CUST_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        customerId: `${company.name}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         warrantyKey,
         companyId,
         retailerId,

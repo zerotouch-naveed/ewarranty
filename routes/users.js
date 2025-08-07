@@ -97,11 +97,21 @@ async function userRoutes(fastify, options) {
       )
         filters.companyId = companyId;
       if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Set to start of the day
+
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // Set to end of the day
+
         filters["createdAt"] = {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate),
+          $gte: start,
+          $lte: end,
         };
       }
+      
+
+      
+      
 
       if (userId &&
         userId !== "ALL" &&
@@ -109,16 +119,19 @@ async function userRoutes(fastify, options) {
         userId !== undefined &&
         userId !== request.user.userId
       ){
+        console.log("target      ", userId);
         targetUserId = userId;
-        const isAllowed = await HierarchyService.isAncestor(
-          request.user.userId,
-          targetUserId
-        );
-        if (!isAllowed) {
-          return reply.code(403).send({
-            success: false,
-            message: 'Access denied'
-          });
+        if (request.user.userType !== "MAIN_OWNER") {
+          const isAllowed = await HierarchyService.isAncestor(
+            request.user.userId,
+            targetUserId
+          );
+          if (!isAllowed) {
+            return reply.code(403).send({
+              success: false,
+              message: 'Access denied'
+            });
+          }
         }
       }
       
@@ -134,7 +147,7 @@ async function userRoutes(fastify, options) {
           search,
           sortBy,
           sortOrder,
-          request.user.userType === "MAIN_OWNER"
+          request.user.userType === "MAIN_OWNER" && targetUserId === request.user.userId
         );
 
         if (isCsv) {

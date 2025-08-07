@@ -1,10 +1,10 @@
-const { Customer, Category, Brand } = require("../schemas");
+const { Customer, User } = require("../schemas");
 const {
   authenticate,
   requireRetailer,
   requireAdmin,
 } = require("../middleware/auth");
-const { CustomerService } = require("../services");
+const { HierarchyService, CustomerService } = require("../services");
 const { catchAsync } = require("../middleware/errorHandler");
 const path = require("path");
 const fs = require("fs");
@@ -197,6 +197,12 @@ async function customerRoutes(fastify, options) {
               default: "desc",
             },
             isCsv: { type: "boolean", default: false },
+            userId: {
+              type: "string",
+              default: "ALL",
+              description:
+                "User ID filter (only for MAIN_OWNER). Use 'ALL' or empty string for all companies",
+            },
           },
         },
       },
@@ -212,8 +218,10 @@ async function customerRoutes(fastify, options) {
         sortBy = "createdDate",
         sortOrder = "desc",
         companyId = "ALL",
-        isCsv = false
+        isCsv = false,
+        userId = request.user.userId,
       } = request.body;
+      let targetUserId = request.user.userId;
 
       const filters = {};
       if (status) filters.isActive = status;
@@ -224,20 +232,57 @@ async function customerRoutes(fastify, options) {
       )
         filters.companyId = companyId;
       if (startDate && endDate) {
+        const start = new Date(startDate);
+        start.setHours(0, 0, 0, 0); // Set to start of the day
+
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999); // Set to end of the day
+
         filters["dates.createdDate"] = {
-          $gte: new Date(startDate),
-          $lte: new Date(endDate),
+          $gte: start,
+          $lte: end,
         };
       }
+      let targetUser = null;
+
+
+      if (userId &&
+              userId !== "ALL" &&
+              userId !== "" &&
+              userId !== undefined &&
+              userId !== request.user.userId
+            ){
+              targetUserId = userId;
+
+              targetUser = await User.findOne({ userId: targetUserId });
+              if (!targetUser) {
+                return reply.code(404).send({
+                  success: false,
+                  message: 'Target user not found'
+                });
+              };
+              
+              if (request.user.userType !== "MAIN_OWNER") {
+                const isAllowed = await HierarchyService.isAncestor(
+                  request.user.userId,
+                  targetUserId
+                );
+                if (!isAllowed) {
+                  return reply.code(403).send({
+                    success: false,
+                    message: 'Access denied'
+                  });
+                }
+              }
+            }
 
       const csvLimit = isCsv ? 10000 : limit; // Adjust as needed
       const csvPage = isCsv ? 1 : page;
-
       const { customers, totalData, currentPage, totalPages, companyList } =
         await CustomerService.getAccessibleCustomers(
-          request.user.userId,
-          request.user.companyId,
-          request.user.userType,
+          targetUserId,
+          targetUser.companyId,
+          targetUserId === request.user.userId ? request.user.userType : targetUser.userType,
           filters,
           csvPage,
           csvLimit,
