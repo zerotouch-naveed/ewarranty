@@ -51,9 +51,7 @@ const start = async () => {
     });
 
     await fastify.register(require("@fastify/cors"), {
-      origin: true, // You can also restrict to ngrok URL here
-      credentials: true,
-      allowedHeaders: ["Content-Type", "Authorization"],
+      origin: ['*'],
       methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     });
 
@@ -93,11 +91,11 @@ const start = async () => {
         host:
           process.env.VERCEL || process.env.LAMBDA_TASK_ROOT
             ? "ewarranty.vercel.app"
-            : `localhost:${process.env.PORT || 3000}`,
+            : `caring-koi-genuine.ngrok-free.app`,
         schemes:
           process.env.VERCEL || process.env.LAMBDA_TASK_ROOT
             ? ["https"]
-            : ["http"],
+            : ["https"],
         consumes: ["application/json"],
         produces: ["application/json"],
         securityDefinitions: {
