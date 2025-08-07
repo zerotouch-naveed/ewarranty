@@ -281,7 +281,7 @@ async function customerRoutes(fastify, options) {
       const { customers, totalData, currentPage, totalPages, companyList } =
         await CustomerService.getAccessibleCustomers(
           targetUserId,
-          targetUser.companyId,
+          targetUserId === request.user.userId ? request.user.companyId : targetUser.companyId,
           targetUserId === request.user.userId ? request.user.userType : targetUser.userType,
           filters,
           csvPage,
