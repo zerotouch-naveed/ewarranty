@@ -131,6 +131,34 @@ async function walletRoutes(fastify, options) {
     });
   }));
 
+  // Get current user profile
+    fastify.get(
+      "/wallet-balance",
+      {
+        preHandler: [authenticate],
+        schema: {
+          description: "Get current user profile",
+          tags: ["Authentication"],
+          security: [{ Bearer: [] }],
+        },
+      },
+      catchAsync(async (request, reply) => {
+  
+        const wallet = await User.findOne({ userId: request.user.userId })
+        .select('walletBalance.remainingAmount')
+        .lean();
+        if(!wallet) return reply.code(404).send({
+          success: false,
+          error: "User not found",
+        });
+  
+        return reply.send({
+          success: true,
+          data: wallet
+        });
+      })
+    );
+
   // Get Wallet Summary
 fastify.get('/summary', {
   preHandler: [authenticate],
