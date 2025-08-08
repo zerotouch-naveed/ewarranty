@@ -557,7 +557,7 @@ const customerSchema = new Schema({
       type: String,
       default: null,
     },
-    serialNumber: { type: String, required: true },
+    serialNumber: { type: String, required: true, unique: true },
     orignalWarranty: { type: Number, default: 0 },
     brand: {
       type: String,
@@ -597,6 +597,14 @@ const customerSchema = new Schema({
       required: true,
     },
     backImage: {
+      type: String, // URL to back image
+      required: true,
+    },
+    rightImage: {
+      type: String, // URL to front image
+      required: true,
+    },
+    leftImage: {
       type: String, // URL to back image
       required: true,
     },

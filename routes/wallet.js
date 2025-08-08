@@ -64,12 +64,13 @@ async function walletRoutes(fastify, options) {
             type: 'string',
             enum: ['asc', 'desc'],
             default: 'desc'
-          }
+          },
+          isCsv: { type: "boolean", default: false },
         }
       },
     }
   }, catchAsync(async (request, reply) => {
-    const { userId, transactionType = 'ALL', startDate, endDate, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc' } = request.body;
+    const { userId, transactionType = 'ALL', startDate, endDate, page = 1, limit = 10, sortBy = 'createdAt', sortOrder = 'desc', isCsv = false, } = request.body;
     if (!userId) {
       return reply.code(400).send({
         success: false,
@@ -108,15 +109,39 @@ async function walletRoutes(fastify, options) {
         $lte: new Date(endDate)
       };
     }
+    const csvLimit = isCsv ? 10000 : limit;
+    const csvPage = isCsv ? 1 : page;
     const { history, totalData, currentPage, totalPages } = await WalletManagementService.getWalletHistory(
       userId,
       companyId,
       filters,
-      page,
-      limit,
+      csvPage,
+      csvLimit,
       sortBy,
       sortOrder
     );
+    if (isCsv) {
+      if (!history || history.length === 0) {
+        return reply.code(404).send({
+          success: false,
+          message: 'No history found for CSV export'
+        });
+      }
+
+      const csvOutput = jsonToCsv(history);
+      
+      // Generate filename with timestamp and filters
+      const timestamp = new Date().toISOString().split('T')[0];
+      const filename = `history_${timestamp}.csv`;
+      
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      reply.header('Cache-Control', 'no-cache');
+      reply.header('Content-Length', Buffer.byteLength(csvOutput, 'utf8'));
+      
+      // Use reply.send() instead of return
+      return reply.send(csvOutput);
+    }
     return reply.send({
       success: true,
       data: { 
@@ -171,6 +196,61 @@ fastify.get('/summary', {
   const summary = await WalletManagementService.getWalletSummary(request.user.userId);
   return reply.send({ success: true, data: summary });
 }));
+
+  function jsonToCsv(jsonArray) {
+  if (!jsonArray || jsonArray.length === 0) {
+    return 'No data available';
+  }
+  
+  try {
+    // Flatten nested objects for CSV export
+    const flattenedData = jsonArray.map(history => ({
+      transactionId: history.transactionId || '',
+      transactionType: history.transactionType || '',
+      fromUser: history.fromUser?.name || '',
+      toUser: history.toUser?.name|| '',
+      notes: history.notes || '',
+      isActive: history.isActive ? 'Active' : 'Inactive',
+      amount: history.amount || 0,
+      warrantyKey: history.warrantyKey || 'N/A',
+      customerDetails: history.customerDetails?.customerName || '',
+      transactionDate: history.transactionDate ? new Date(history.createdAt).toLocaleDateString() : ''
+    }));
+
+    // Get headers from first object
+    const headers = Object.keys(flattenedData[0]);
+    
+    // Create CSV content
+    const csvContent = [
+      headers.join(','), // Header row
+      ...flattenedData.map(row => 
+        headers.map(header => {
+          let value = row[header];
+          
+          // Handle null/undefined values
+          if (value === null || value === undefined) {
+            value = '';
+          }
+          
+          // Convert to string and handle special characters
+          value = String(value);
+          
+          // Escape quotes and wrap in quotes if contains comma, quote, or newline
+          if (value.includes(',') || value.includes('"') || value.includes('\n') || value.includes('\r')) {
+            value = `"${value.replace(/"/g, '""')}"`;
+          }
+          
+          return value;
+        }).join(',')
+      )
+    ].join('\n');
+    return csvContent;
+  } catch (error) {
+    console.error('Error converting to CSV:', error);
+    return 'Error generating CSV data';
+  }
+}
+
 }
 
 module.exports = walletRoutes;

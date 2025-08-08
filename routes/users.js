@@ -119,7 +119,6 @@ async function userRoutes(fastify, options) {
         userId !== undefined &&
         userId !== request.user.userId
       ){
-        console.log("target      ", userId);
         targetUserId = userId;
         if (request.user.userType !== "MAIN_OWNER") {
           const isAllowed = await HierarchyService.isAncestor(
