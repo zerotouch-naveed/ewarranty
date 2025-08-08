@@ -15,15 +15,13 @@ async function categoriesRoutes(fastify, options) {
         async (req, reply) => {
         try {
             let query = {}
-            query.createdAt = -1;
             if (req.user.userType !== "MAIN_OWNER"){
                 query.isActive = true
             }
-            const existingCategories = await Category.find(query);
+            const existingCategories = await Category.find(query).sort({ createdAt: -1 }).lean();
             if (!existingCategories) {
             return reply.status(409).send({ message: `No categories found!` });
             }
-
             reply.status(200).send(existingCategories);
         } catch (error) {
             reply.status(500).send({ message: "Something went wrong!" });
