@@ -5,6 +5,7 @@ const {
 } = require("../middleware/auth");
 const path = require("path");
 const fs = require("fs");
+const { request } = require("https");
 
 
 async function categoriesRoutes(fastify, options) {
@@ -13,7 +14,12 @@ async function categoriesRoutes(fastify, options) {
         { preHandler: [authenticate] },
         async (req, reply) => {
         try {
-            const existingCategories = await Category.find({ isActive: true });
+            let query = {}
+            query.createdAt = "-1";
+            if (req.user.userType !== "MAIN_OWNER"){
+                query.isActive = true
+            }
+            const existingCategories = await Category.find(query);
             if (!existingCategories) {
             return reply.status(409).send({ message: `No categories found!` });
             }
