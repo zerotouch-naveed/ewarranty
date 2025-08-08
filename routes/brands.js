@@ -5,6 +5,7 @@ const {
 } = require("../middleware/auth");
 const path = require("path");
 const fs = require("fs");
+const { log } = require("winston");
 
 
 async function brandRoutes(fastify, options) {
@@ -12,8 +13,11 @@ async function brandRoutes(fastify, options) {
     "/all-brands",
     { preHandler: [authenticate,requireAdmin] },
     async (req, reply) => {
-        try {
-        const existingBrands = await Brand.find({ isActive: true });
+        try {let query = {}
+            if (req.user.userType !== "MAIN_OWNER"){
+                query.isActive = true
+            }
+        const existingBrands = await Brand.find(query).sort({ createdAt: 1 }).lean();
         if (!existingBrands || existingBrands.length === 0) {
             return reply.status(409).send({ message: `No brands found!` });
         }
@@ -50,7 +54,7 @@ async function brandRoutes(fastify, options) {
     async (req, reply) => {
         try {
         const isMultipart = req.isMultipart();
-        let BrandId, otherBrandData = {};
+        let BrandId,categoryIds, otherBrandData = {};
         let fileName, filePath;
         if (isMultipart) {
             const parts = req.parts();
@@ -58,6 +62,16 @@ async function brandRoutes(fastify, options) {
                 if (part.type === 'field') {
                     if (part.fieldname === 'brandId') {
                         BrandId = part.value;
+                    }else if (part.fieldname === 'categoryIds') {
+                        try {
+                            categoryIds = JSON.parse(part.value);
+                        } catch (parseError) {
+                        return reply
+                            .status(400)
+                            .send({ 
+                            message: "categoryIds must be a valid JSON array." 
+                            });
+                        }
                     } else {
                         otherBrandData[part.fieldname] = part.value;
                     }
@@ -68,6 +82,34 @@ async function brandRoutes(fastify, options) {
                     await part.file.pipe(writableStream);
                     otherBrandData.img = 'public/' + fileName;
                 }
+            }
+            let processedCategoryIds = [];
+            if (categoryIds && categoryIds.length > 0) {
+                for (const categoryId of categoryIds) {
+                if (typeof categoryId !== 'string') {
+                    return reply
+                    .status(400)
+                    .send({ 
+                        message: "Each categoryId must be a string." 
+                    });
+                }
+                const existingCategory = await Category.findOne({ 
+                    categoryId: categoryId,
+                    isActive: true 
+                });
+                if (!existingCategory) {
+                    return reply
+                    .status(400)
+                    .send({ 
+                        message: `Category with ID "${categoryId}" not found.` 
+                    });
+                }
+                processedCategoryIds.push({
+                    categoryId: categoryId,
+                    categoryName: existingCategory.categoryName
+                });
+                }
+                otherBrandData.categoryIds = processedCategoryIds;
             }
         }else {
             const { brandId , ...brandData } = req.body;
@@ -85,8 +127,8 @@ async function brandRoutes(fastify, options) {
         }
         return reply.status(200).send(existingBrands);
         } catch (error) {
-        reply.status(500).send({ message: "Something went wrong!" });
-        console.log("Error while fetching brands: ", error);
+            reply.status(500).send({ message: "Something went wrong!" });
+            console.log("Error while fetching brands: ", error);
         }
     });
 
@@ -133,7 +175,6 @@ async function brandRoutes(fastify, options) {
                 // Parse categoryIds as JSON string array of IDs
                 try {
                 categoryIds = JSON.parse(part.value);
-                console.log("Parsed categoryIds:", categoryIds);
                 
                 } catch (parseError) {
                 return reply
