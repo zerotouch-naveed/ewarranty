@@ -18,7 +18,7 @@ async function categoriesRoutes(fastify, options) {
             if (req.user.userType !== "MAIN_OWNER"){
                 query.isActive = true
             }
-            const existingCategories = await Category.find(query).sort({ createdAt: -1 }).lean();
+            const existingCategories = await Category.find(query).sort({ createdAt: 1 }).lean();
             if (!existingCategories) {
             return reply.status(409).send({ message: `No categories found!` });
             }
