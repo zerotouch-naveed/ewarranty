@@ -15,7 +15,7 @@ async function categoriesRoutes(fastify, options) {
         async (req, reply) => {
         try {
             let query = {}
-            query.createdAt = "-1";
+            query.createdAt = -1;
             if (req.user.userType !== "MAIN_OWNER"){
                 query.isActive = true
             }
